@@ -213,7 +213,12 @@ def _run_download(args: Namespace, videos: list[Video], reporter: PipelineReport
         audio_only=args.audio_only,
     )
     settings = AppSettings.from_env()
-    downloader = YtDlpDownloader(retries=settings.retries, backoff_seconds=settings.backoff_seconds)
+    downloader = YtDlpDownloader(
+        retries=settings.retries,
+        backoff_seconds=settings.backoff_seconds,
+        request_cookie=settings.request_cookie,
+        request_proxy=settings.request_proxy,
+    )
     result = downloader.download_batch(
         videos,
         output_dir=args.output,

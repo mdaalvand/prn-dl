@@ -6,6 +6,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
+from constants import DEFAULT_USER_AGENT
 from models import Video
 
 
@@ -20,6 +21,9 @@ class DownloadResult:
 class YtDlpDownloader:
     retries: int
     backoff_seconds: float
+    request_cookie: str = ""
+    request_proxy: str = ""
+    user_agent: str = DEFAULT_USER_AGENT
 
     def __post_init__(self) -> None:
         self._logger = logging.getLogger("phfetch.downloader")
@@ -95,14 +99,33 @@ class YtDlpDownloader:
             format_selector = "bestaudio/best"
         else:
             format_selector = f"bestvideo[height<={quality}]+bestaudio/best[height<={quality}]/best"
-        return [
+        cmd = [
             "yt-dlp",
             "--no-progress",
             "--retries",
             "3",
+            "--extractor-retries",
+            "3",
+            "--fragment-retries",
+            "8",
+            "--impersonate",
+            "chrome",
+            "--user-agent",
+            self.user_agent,
+            "--referer",
+            "https://www.pornhub.com/",
+            "--add-header",
+            "Origin: https://www.pornhub.com",
+            "--add-header",
+            "Accept-Language: en-US,en;q=0.9",
             "-f",
             format_selector,
             "-o",
             output_pattern,
             url,
         ]
+        if self.request_proxy:
+            cmd.extend(["--proxy", self.request_proxy])
+        if self.request_cookie:
+            cmd.extend(["--add-header", f"Cookie: {self.request_cookie}"])
+        return cmd

@@ -84,8 +84,15 @@ def test_download_dry_run_with_json_keeps_stdout_clean(capsys) -> None:
 
 def test_download_json_output_contains_context_and_reasons(monkeypatch, capsys) -> None:
     class FakeDownloader:
-        def __init__(self, retries: int, backoff_seconds: float) -> None:
-            _ = (retries, backoff_seconds)
+        def __init__(
+            self,
+            retries: int,
+            backoff_seconds: float,
+            request_cookie: str = "",
+            request_proxy: str = "",
+            user_agent: str = "",
+        ) -> None:
+            _ = (retries, backoff_seconds, request_cookie, request_proxy, user_agent)
 
         def download_batch(self, videos, output_dir, quality, audio_only, timeout):
             _ = (videos, output_dir, quality, audio_only, timeout)
