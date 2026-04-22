@@ -57,6 +57,8 @@ class YtDlpDownloader:
             if ok:
                 return True, ""
             last_reason = reason
+            if self._is_non_retriable_error(reason):
+                break
             if attempt == self.retries:
                 break
             sleep_seconds = self.backoff_seconds * (2**attempt)
@@ -161,9 +163,15 @@ class YtDlpDownloader:
         if self.request_proxy:
             cmd.extend(["--proxy", self.request_proxy])
         if self.request_cookie:
+            cmd.extend(["--cookies", self.request_cookie])
+        if self.request_cookie:
             cmd.extend(["--add-header", f"Cookie: {self.request_cookie}"])
         return cmd
 
     def _is_impersonate_not_available(self, stderr: str) -> bool:
         low = stderr.lower()
         return "impersonate target" in low and "not available" in low
+
+    def _is_non_retriable_error(self, reason: str) -> bool:
+        low = reason.lower()
+        return "flagged for verification in accordance with our trust and safety policy" in low

@@ -25,6 +25,8 @@ jobs:
       URLS: ${{ inputs.urls }}
       QUALITY: ${{ inputs.quality }}
       OUTPUT_DIR: ${{ inputs.output_dir }}
+      PHFETCH_COOKIE: ${{ secrets.PHFETCH_COOKIE }}
+      PHFETCH_PROXY: ${{ secrets.PHFETCH_PROXY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
