@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
+import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -22,12 +24,55 @@ class YtDlpDownloader:
     retries: int
     backoff_seconds: float
     request_cookie: str = ""
+    request_cookies_file: str = ""
     request_proxy: str = ""
     user_agent: str = DEFAULT_USER_AGENT
     impersonate_target: str = ""
 
     def __post_init__(self) -> None:
         self._logger = logging.getLogger("phfetch.downloader")
+        self._temp_cookies_file = ""
+        self._resolved_cookies_file = self._resolve_cookies_file()
+
+    def _resolve_cookies_file(self) -> str:
+        raw = (self.request_cookies_file or self.request_cookie or "").strip()
+        if not raw:
+            return ""
+        if self._looks_like_cookie_file_content(raw):
+            fd, temp_path = tempfile.mkstemp(prefix="phfetch-cookies-", suffix=".txt")
+            with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                handle.write(self._normalize_cookie_file_content(raw))
+            self._temp_cookies_file = temp_path
+            return temp_path
+        maybe_path = Path(raw)
+        if maybe_path.exists() and maybe_path.is_file():
+            return str(maybe_path)
+        return ""
+
+    def _cleanup_temp_cookies_file(self) -> None:
+        if not self._temp_cookies_file:
+            return
+        try:
+            Path(self._temp_cookies_file).unlink(missing_ok=True)
+        finally:
+            self._temp_cookies_file = ""
+            self._resolved_cookies_file = ""
+
+    @staticmethod
+    def _looks_like_cookie_file_content(value: str) -> bool:
+        if "\n" not in value and "\t" not in value:
+            return False
+        if "# Netscape HTTP Cookie File" in value:
+            return True
+        lines = [line for line in value.splitlines() if line and not line.startswith("#")]
+        return any(line.count("\t") >= 6 for line in lines)
+
+    @staticmethod
+    def _normalize_cookie_file_content(value: str) -> str:
+        text = value.strip()
+        if text.startswith("# Netscape HTTP Cookie File"):
+            return text + "\n"
+        return "# Netscape HTTP Cookie File\n" + text + "\n"
 
     def download_batch(
         self,
@@ -37,18 +82,21 @@ class YtDlpDownloader:
         audio_only: bool,
         timeout: int,
     ) -> DownloadResult:
-        Path(output_dir).mkdir(parents=True, exist_ok=True)
-        succeeded: list[str] = []
-        failed: list[str] = []
-        failures: dict[str, str] = {}
-        for video in videos:
-            ok, reason = self._download_with_retry(video.url, output_dir, quality, audio_only, timeout)
-            if ok:
-                succeeded.append(video.url)
-                continue
-            failed.append(video.url)
-            failures[video.url] = reason
-        return DownloadResult(succeeded=succeeded, failed=failed, failures=failures)
+        try:
+            Path(output_dir).mkdir(parents=True, exist_ok=True)
+            succeeded: list[str] = []
+            failed: list[str] = []
+            failures: dict[str, str] = {}
+            for video in videos:
+                ok, reason = self._download_with_retry(video.url, output_dir, quality, audio_only, timeout)
+                if ok:
+                    succeeded.append(video.url)
+                    continue
+                failed.append(video.url)
+                failures[video.url] = reason
+            return DownloadResult(succeeded=succeeded, failed=failed, failures=failures)
+        finally:
+            self._cleanup_temp_cookies_file()
 
     def _download_with_retry(self, url: str, output_dir: str, quality: int, audio_only: bool, timeout: int) -> tuple[bool, str]:
         last_reason = "unknown_error"
@@ -162,9 +210,9 @@ class YtDlpDownloader:
             cmd.extend(["--impersonate", impersonate_target])
         if self.request_proxy:
             cmd.extend(["--proxy", self.request_proxy])
-        if self.request_cookie:
-            cmd.extend(["--cookies", self.request_cookie])
-        if self.request_cookie:
+        if self._resolved_cookies_file:
+            cmd.extend(["--cookies", self._resolved_cookies_file])
+        elif self.request_cookie:
             cmd.extend(["--add-header", f"Cookie: {self.request_cookie}"])
         return cmd
 
