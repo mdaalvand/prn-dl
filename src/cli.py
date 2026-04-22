@@ -16,7 +16,7 @@ from status import PipelineReporter
 
 
 def build_parser() -> argparse.ArgumentParser:
-    settings = AppSettings.from_env()
+    settings = AppSettings()
     parser = argparse.ArgumentParser(prog="phfetch", description="Search and download videos with filters.")
     parser.add_argument("--log-level", default="INFO")
 
@@ -72,6 +72,7 @@ def _add_filter_args(parser: argparse.ArgumentParser, settings: AppSettings) -> 
     parser.add_argument("--include-terms")
     parser.add_argument("--exclude-terms")
     parser.add_argument("--max-pages", type=int, default=settings.default_max_pages)
+    parser.add_argument("--post-filter-query", action="store_true")
 
 
 def _add_download_args(parser: argparse.ArgumentParser, settings: AppSettings) -> None:
@@ -131,6 +132,7 @@ def _build_search_options(args: Namespace, query: str) -> SearchOptions:
         max_pages=args.max_pages,
         sort_by=_sort_key_from_order(args.order),
         title_contains=args.include_terms,
+        post_filter_query=args.post_filter_query,
     )
 
 

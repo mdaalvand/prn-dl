@@ -24,4 +24,5 @@ class VideoProvider(Protocol):
         max_duration: int | None = None,
         hd_only: bool = False,
         min_quality: int | None = None,
+        post_filter_query: bool = False,
     ) -> list[Video]: ...

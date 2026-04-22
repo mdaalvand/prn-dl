@@ -32,6 +32,7 @@ class SearchOptions:
     max_pages: int = 3
     title_contains: str | None = None
     sort_by: str = "relevance"
+    post_filter_query: bool = False
 
 
 def run_search_pipeline(provider, options: SearchOptions, reporter: PipelineReporter) -> list[Video]:
@@ -77,6 +78,7 @@ def _provider_kwargs(provider, options: SearchOptions, reporter: PipelineReporte
         "max_duration": options.max_duration,
         "hd_only": options.hd_only,
         "min_quality": options.min_quality,
+        "post_filter_query": options.post_filter_query,
     }
     accepted = set(inspect.signature(provider.search_videos).parameters)
     return {key: value for key, value in payload.items() if key in accepted}

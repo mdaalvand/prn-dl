@@ -38,6 +38,12 @@ def test_search_accepts_category() -> None:
     assert args.category == "gay"
 
 
+def test_search_accepts_optional_query_post_filter_flag() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["search", "demo", "--post-filter-query"])
+    assert args.post_filter_query is True
+
+
 def test_download_accepts_page_url_multiple_times() -> None:
     parser = build_parser()
     args = parser.parse_args(

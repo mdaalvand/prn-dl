@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from difflib import SequenceMatcher
 import re
 from urllib.parse import urlencode
 
@@ -45,6 +46,7 @@ class PornhubProvider:
         max_duration: int | None = None,
         hd_only: bool = False,
         min_quality: int | None = None,
+        post_filter_query: bool = False,
     ) -> list[Video]:
         normalized_query = self._normalized_search_query(query)
         resolved_orientation = self._effective_orientation(orientation, category, normalized_query)
@@ -66,9 +68,10 @@ class PornhubProvider:
             hd_only=hd_only,
             progress=progress,
         )
-        results = self._filter_by_query(results, query=normalized_query, progress=progress, strict=True)
-        if progress is not None:
-            progress(f"query_relevance_filtered={len(results)}")
+        if post_filter_query:
+            results = self._filter_by_query(results, query=normalized_query, progress=progress, strict=True)
+            if progress is not None:
+                progress(f"query_relevance_filtered={len(results)}")
         if min_quality is not None:
             results = self._filter_by_quality(results, min_quality=min_quality, timeout=timeout)
         return results
@@ -236,6 +239,8 @@ class PornhubProvider:
         if not terms:
             return videos
         threshold = 2 if len(terms) > 1 else 1
+        if strict and len(terms) > 2:
+            threshold = len(terms) - 1
         scored = self._score_videos(videos, terms)
         selected = [video for score, _, video in scored if score >= threshold]
         if selected or strict:
@@ -245,10 +250,30 @@ class PornhubProvider:
     def _score_videos(self, videos: list[Video], terms: list[str]) -> list[tuple[int, int, Video]]:
         scored: list[tuple[int, int, Video]] = []
         for index, video in enumerate(videos):
-            title = normalize_text(video.title)
-            score = sum(1 for term in terms if term in title)
+            title_tokens = split_terms(video.title)
+            score = sum(1 for term in terms if self._term_matches_title(term, title_tokens))
             scored.append((score, index, video))
         return sorted(scored, key=lambda item: (-item[0], item[1]))
+
+    def _term_matches_title(self, term: str, title_tokens: list[str]) -> bool:
+        if not title_tokens:
+            return False
+        for token in title_tokens:
+            if term == token:
+                return True
+            if len(term) >= 4 and term in token:
+                return True
+            if len(token) >= 4 and token in term:
+                return True
+            if self._is_close_match(term, token):
+                return True
+        return False
+
+    def _is_close_match(self, left: str, right: str) -> bool:
+        if abs(len(left) - len(right)) > 2:
+            return False
+        ratio = SequenceMatcher(a=left, b=right).ratio()
+        return ratio >= 0.84
 
     def _video_from_webmaster_item(self, item: dict[str, object]) -> Video | None:
         url = str(item.get("url") or "")

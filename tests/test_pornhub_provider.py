@@ -27,6 +27,18 @@ def test_filter_by_query_uses_stricter_threshold_for_strict_mode() -> None:
     assert [video.url for video in out] == ["u1"]
 
 
+def test_filter_by_query_strict_tolerates_small_typo_in_term() -> None:
+    provider = PornhubProvider()
+    videos = [
+        Video(title="Angel Rivera interview", url="u1"),
+        Video(title="Angel unrelated title", url="u2"),
+    ]
+
+    out = provider._filter_by_query(videos, query="angel reivera", progress=None, strict=True)
+
+    assert [video.url for video in out] == ["u1"]
+
+
 def test_filter_by_query_falls_back_to_single_token_matches_when_needed() -> None:
     provider = PornhubProvider()
     videos = [
