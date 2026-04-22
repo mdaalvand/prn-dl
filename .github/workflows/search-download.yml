@@ -113,6 +113,8 @@ jobs:
       MIN_VIEWS: ${{ inputs.min_views }}
       OUTPUT_DIR: ${{ inputs.output_dir }}
       TIMEOUT: ${{ inputs.timeout }}
+      PHFETCH_COOKIE: ${{ secrets.PHFETCH_COOKIE }}
+      PHFETCH_PROXY: ${{ secrets.PHFETCH_PROXY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6

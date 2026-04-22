@@ -25,6 +25,8 @@ class PornhubProvider:
         self.http_client = http_client or HttpClient(
             retries=self.settings.retries,
             backoff_seconds=self.settings.backoff_seconds,
+            request_cookie=self.settings.request_cookie,
+            request_proxy=self.settings.request_proxy,
         )
 
     def search_videos(
@@ -47,6 +49,7 @@ class PornhubProvider:
         normalized_query = self._normalized_search_query(query)
         resolved_orientation = self._effective_orientation(orientation, category, normalized_query)
         base = self._search_base_url(resolved_orientation)
+        self.http_client.warmup(timeout=timeout)
         pages = max_pages or self.settings.default_max_pages
         results = self._collect_pages(
             base_url=base,

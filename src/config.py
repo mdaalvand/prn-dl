@@ -17,6 +17,8 @@ class AppSettings:
     default_mode: str = constants.DEFAULT_MODE
     default_output_dir: str = constants.DEFAULT_OUTPUT_DIR
     default_quality: int = constants.DEFAULT_QUALITY
+    request_cookie: str = ""
+    request_proxy: str = ""
 
     @classmethod
     def from_env(cls) -> "AppSettings":
@@ -30,4 +32,6 @@ class AppSettings:
             default_mode=os.getenv("PHFETCH_MODE", constants.DEFAULT_MODE),
             default_output_dir=os.getenv("PHFETCH_OUTPUT", constants.DEFAULT_OUTPUT_DIR),
             default_quality=int(os.getenv("PHFETCH_QUALITY", constants.DEFAULT_QUALITY)),
+            request_cookie=os.getenv("PHFETCH_COOKIE", ""),
+            request_proxy=os.getenv("PHFETCH_PROXY", ""),
         )

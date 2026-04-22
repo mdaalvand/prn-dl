@@ -257,6 +257,8 @@ def _handle_http_request_error(args: Namespace, exc: HttpRequestError) -> int:
             "order": getattr(args, "order", None),
             "period": getattr(args, "period", None),
             "timeout": getattr(args, "timeout", None),
+            "cookie_configured": bool(AppSettings.from_env().request_cookie),
+            "proxy_configured": bool(AppSettings.from_env().request_proxy),
         },
     }
     if getattr(args, "json", False):

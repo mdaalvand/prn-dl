@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import time
+from http.cookies import SimpleCookie
 from dataclasses import dataclass, field
 
 import requests
@@ -14,6 +15,8 @@ from errors import HttpRequestError
 class HttpClient:
     retries: int
     backoff_seconds: float
+    request_cookie: str = ""
+    request_proxy: str = ""
     session: requests.Session = field(default_factory=requests.Session)
 
     def __post_init__(self) -> None:
@@ -23,12 +26,43 @@ class HttpClient:
                 "User-Agent": DEFAULT_USER_AGENT,
                 "Accept-Language": "en-US,en;q=0.9",
                 "Accept": "text/html,application/json;q=0.9,*/*;q=0.8",
+                "Upgrade-Insecure-Requests": "1",
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "none",
+                "Sec-Fetch-User": "?1",
+                "sec-ch-ua": '"Chromium";v="136", "Google Chrome";v="136", "Not.A/Brand";v="99"',
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": '"Linux"',
+                "Referer": "https://www.pornhub.com/",
+                "Origin": "https://www.pornhub.com",
             }
         )
         self.session.cookies.set("platform", "pc")
         self.session.cookies.set("accessAgeDisclaimerPH", "1")
         self.session.cookies.set("accessPH", "1")
         self.session.cookies.set("age_verified", "1")
+        self._set_cookie_string(self.request_cookie)
+        self._set_proxy(self.request_proxy)
+
+    def warmup(self, timeout: int) -> None:
+        try:
+            self.session.get("https://www.pornhub.com/", timeout=timeout)
+        except requests.RequestException:
+            return
+
+    def _set_proxy(self, proxy: str) -> None:
+        if not proxy:
+            return
+        self.session.proxies.update({"http": proxy, "https": proxy})
+
+    def _set_cookie_string(self, cookie_string: str) -> None:
+        if not cookie_string:
+            return
+        jar = SimpleCookie()
+        jar.load(cookie_string)
+        for key, morsel in jar.items():
+            self.session.cookies.set(key, morsel.value, domain=".pornhub.com")
 
     def get_text(self, url: str, timeout: int, params: dict[str, object] | None = None) -> str:
         response = self._request("GET", url, timeout=timeout, params=params)
