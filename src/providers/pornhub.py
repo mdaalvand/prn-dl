@@ -163,6 +163,8 @@ class PornhubProvider:
     def _search_base_url(self, orientation: str | None) -> str:
         if orientation == "gay":
             return "https://www.pornhub.com/gay/video/search"
+        if orientation == "lesbian":
+            return "https://www.pornhub.com/lesbian/video/search"
         if orientation == "transgender":
             return "https://www.pornhub.com/transgender/video/search"
         return "https://www.pornhub.com/video/search"
@@ -223,13 +225,21 @@ class PornhubProvider:
 
     def _effective_orientation(self, orientation: str | None, category: str | None = None, query: str | None = None) -> str:
         normalized = normalize_orientation(orientation)
-        if normalized in {"straight", "gay", "transgender"}:
+        if normalized in {"straight", "gay", "lesbian", "transgender"}:
             return normalized
-        if (category or "").strip().lower() == "gay":
+        category_key = (category or "").strip().lower()
+        if category_key == "gay":
             return "gay"
-        if " gay " in f" {(query or '').lower()} ":
+        if category_key in {"lesbian", "lesbo"}:
+            return "lesbian"
+        lowered_query = f" {(query or '').lower()} "
+        if " gay " in lowered_query:
             return "gay"
-        return "straight"
+        if " lesbian " in lowered_query or " lesbo " in lowered_query:
+            return "lesbian"
+        if normalized in {"bi", "any"}:
+            return "straight"
+        return "gay"
 
     def _normalized_search_query(self, query: str) -> str:
         return normalize_text(query)

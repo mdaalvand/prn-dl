@@ -59,6 +59,13 @@ def test_search_url_uses_gay_path_when_orientation_is_gay() -> None:
     assert url == "https://www.pornhub.com/gay/video/search?search=demo&page=2"
 
 
+def test_search_url_uses_lesbian_path_when_orientation_is_lesbian() -> None:
+    provider = PornhubProvider()
+    base = provider._search_base_url(provider._effective_orientation("lesbian"))
+    url = provider._search_url(base, "demo", 2)
+    assert url == "https://www.pornhub.com/lesbian/video/search?search=demo&page=2"
+
+
 def test_search_url_uses_default_path_for_non_gay_orientation() -> None:
     provider = PornhubProvider()
     base = provider._search_base_url(provider._effective_orientation("bisexual"))

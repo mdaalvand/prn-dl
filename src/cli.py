@@ -61,7 +61,7 @@ def _add_filter_args(parser: argparse.ArgumentParser, settings: AppSettings) -> 
     parser.add_argument("--seed", type=int)
     parser.add_argument("--order", default="most_relevant")
     parser.add_argument("--period", default="alltime")
-    parser.add_argument("--orientation", default="straight")
+    parser.add_argument("--orientation", default="gay")
     parser.add_argument("--category")
     parser.add_argument("--exclude-category")
     parser.add_argument("--min-duration", type=int)

@@ -31,9 +31,15 @@ on:
       orientation:
         description: Orientation
         required: false
-        default: straight
+        default: gay
         type: choice
-        options: [straight, gay, transgender]
+        options: [gay, lesbian, straight, transgender]
+      quality:
+        description: Download quality
+        required: false
+        default: "480"
+        type: choice
+        options: ["360", "480", "720", "1080", "1440", "2160"]
       order:
         description: Sort order
         required: false
@@ -105,6 +111,7 @@ jobs:
       MODE: ${{ inputs.mode }}
       SEED: ${{ inputs.seed }}
       ORIENTATION: ${{ inputs.orientation }}
+      QUALITY: ${{ inputs.quality }}
       ORDER: ${{ inputs.order }}
       PERIOD: ${{ inputs.period }}
       CATEGORY: ${{ inputs.category }}
@@ -140,7 +147,7 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          cmd=(phfetch download --query "$QUERY" --limit "$LIMIT" --pool-size "$POOL_SIZE" --mode "$MODE" --orientation "$ORIENTATION" --order "$ORDER" --period "$PERIOD" --output "$OUTPUT_DIR" --timeout "$TIMEOUT" --json)
+          cmd=(phfetch download --query "$QUERY" --limit "$LIMIT" --pool-size "$POOL_SIZE" --mode "$MODE" --orientation "$ORIENTATION" --order "$ORDER" --period "$PERIOD" --quality "$QUALITY" --output "$OUTPUT_DIR" --timeout "$TIMEOUT" --json)
           [[ -n "$SEED" ]] && cmd+=(--seed "$SEED")
           [[ -n "$CATEGORY" ]] && cmd+=(--category "$CATEGORY")
           [[ -n "$EXCLUDE_CATEGORY" ]] && cmd+=(--exclude-category "$EXCLUDE_CATEGORY")

@@ -49,3 +49,8 @@ def test_orientation_alias_farsi_is_accepted_without_local_title_filtering() -> 
 
 def test_normalize_orientation_unknown_value() -> None:
     assert normalize_orientation("unknown") is None
+
+
+def test_normalize_orientation_lesbian_aliases() -> None:
+    assert normalize_orientation("lesbian") == "lesbian"
+    assert normalize_orientation("لزبین") == "lesbian"

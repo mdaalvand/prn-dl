@@ -10,8 +10,9 @@ on:
       quality:
         description: Max quality
         required: false
-        default: "720"
-        type: string
+        default: "480"
+        type: choice
+        options: ["360", "480", "720", "1080", "1440", "2160"]
       output_dir:
         description: Output directory
         required: false

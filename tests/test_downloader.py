@@ -17,3 +17,17 @@ def test_raw_cookie_file_content_is_materialized_and_cleaned() -> None:
 
     assert downloader._temp_cookies_file == ""
     assert not Path(temp_path).exists()
+
+
+def test_build_command_includes_numbered_output_prefix() -> None:
+    downloader = YtDlpDownloader(retries=0, backoff_seconds=0.0)
+    cmd = downloader._build_command(
+        url="https://www.pornhub.com/view_video.php?viewkey=abc",
+        output_dir="downloads",
+        quality=480,
+        audio_only=False,
+        impersonate_target="",
+        number_prefix="007",
+    )
+    output_value = cmd[cmd.index("-o") + 1]
+    assert output_value.endswith("downloads/007 - %(title)s.%(ext)s")

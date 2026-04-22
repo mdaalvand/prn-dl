@@ -19,7 +19,7 @@ class SearchOptions:
     seed: int | None = None
     order: str = "most_relevant"
     period: str = "alltime"
-    orientation: str = "straight"
+    orientation: str = "gay"
     category: str | None = None
     exclude_category: str | None = None
     min_duration: int | None = None

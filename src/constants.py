@@ -6,7 +6,7 @@ DEFAULT_LIMIT = 10
 DEFAULT_POOL_SIZE = 100
 DEFAULT_MODE = "top"
 DEFAULT_OUTPUT_DIR = "downloads"
-DEFAULT_QUALITY = 720
+DEFAULT_QUALITY = 480
 DEFAULT_RETRIES = 3
 DEFAULT_BACKOFF_SECONDS = 0.8
 DEFAULT_USER_AGENT = (
@@ -33,6 +33,8 @@ ORIENTATION_ALIASES = {
     "straight": "straight",
     "hetero": "straight",
     "gay": "gay",
+    "lesbian": "lesbian",
+    "lesbo": "lesbian",
     "trans": "transgender",
     "transgender": "transgender",
     "bi": "bi",
@@ -41,5 +43,7 @@ ORIENTATION_ALIASES = {
     "all": "any",
     "دوجنسه": "bi",
     "گی": "gay",
+    "لز": "lesbian",
+    "لزبین": "lesbian",
     "ترنس": "transgender",
 }

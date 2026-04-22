@@ -87,8 +87,16 @@ class YtDlpDownloader:
             succeeded: list[str] = []
             failed: list[str] = []
             failures: dict[str, str] = {}
-            for video in videos:
-                ok, reason = self._download_with_retry(video.url, output_dir, quality, audio_only, timeout)
+            for index, video in enumerate(videos, start=1):
+                number_prefix = f"{index:03d}"
+                ok, reason = self._download_with_retry(
+                    video.url,
+                    output_dir,
+                    quality,
+                    audio_only,
+                    timeout,
+                    number_prefix=number_prefix,
+                )
                 if ok:
                     succeeded.append(video.url)
                     continue
@@ -98,10 +106,18 @@ class YtDlpDownloader:
         finally:
             self._cleanup_temp_cookies_file()
 
-    def _download_with_retry(self, url: str, output_dir: str, quality: int, audio_only: bool, timeout: int) -> tuple[bool, str]:
+    def _download_with_retry(
+        self,
+        url: str,
+        output_dir: str,
+        quality: int,
+        audio_only: bool,
+        timeout: int,
+        number_prefix: str,
+    ) -> tuple[bool, str]:
         last_reason = "unknown_error"
         for attempt in range(self.retries + 1):
-            ok, reason = self._run_yt_dlp(url, output_dir, quality, audio_only, timeout)
+            ok, reason = self._run_yt_dlp(url, output_dir, quality, audio_only, timeout, number_prefix=number_prefix)
             if ok:
                 return True, ""
             last_reason = reason
@@ -114,13 +130,22 @@ class YtDlpDownloader:
             time.sleep(sleep_seconds)
         return False, last_reason
 
-    def _run_yt_dlp(self, url: str, output_dir: str, quality: int, audio_only: bool, timeout: int) -> tuple[bool, str]:
+    def _run_yt_dlp(
+        self,
+        url: str,
+        output_dir: str,
+        quality: int,
+        audio_only: bool,
+        timeout: int,
+        number_prefix: str,
+    ) -> tuple[bool, str]:
         cmd = self._build_command(
             url,
             output_dir,
             quality,
             audio_only,
             impersonate_target=self.impersonate_target,
+            number_prefix=number_prefix,
         )
         process_timeout = max(timeout * 12, 300)
         try:
@@ -146,6 +171,7 @@ class YtDlpDownloader:
                 quality,
                 audio_only,
                 impersonate_target="",
+                number_prefix=number_prefix,
             )
             self._logger.warning(
                 "impersonate_unavailable_fallback url=%s target=%s",
@@ -177,8 +203,9 @@ class YtDlpDownloader:
         quality: int,
         audio_only: bool,
         impersonate_target: str,
+        number_prefix: str,
     ) -> list[str]:
-        output_pattern = str(Path(output_dir) / "%(title)s.%(ext)s")
+        output_pattern = str(Path(output_dir) / f"{number_prefix} - %(title)s.%(ext)s")
         if audio_only:
             format_selector = "bestaudio/best"
         else:

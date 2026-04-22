@@ -14,10 +14,10 @@ def test_default_provider_registered() -> None:
     assert provider.name == "pornhub"
 
 
-def test_download_default_quality_is_medium_720() -> None:
+def test_download_default_quality_is_480() -> None:
     parser = build_parser()
     args = parser.parse_args(["download", "demo query"])
-    assert args.quality == 720
+    assert args.quality == 480
 
 
 def test_search_accepts_max_pages() -> None:
