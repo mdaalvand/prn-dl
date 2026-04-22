@@ -18,6 +18,9 @@ on:
         default: downloads
         type: string
 
+permissions:
+  contents: write
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -27,6 +30,8 @@ jobs:
       OUTPUT_DIR: ${{ inputs.output_dir }}
       PHFETCH_COOKIE: ${{ secrets.PHFETCH_COOKIE }}
       PHFETCH_PROXY: ${{ secrets.PHFETCH_PROXY }}
+      RELEASE_TAG: direct-download-${{ github.run_id }}-${{ github.run_attempt }}
+      RELEASE_NAME: Direct Download ${{ github.run_id }}.${{ github.run_attempt }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -42,8 +47,148 @@ jobs:
           pip install .
 
       - name: Direct Download
+        id: run_cmd
         shell: bash
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          printf '%s\n' "$URLS" > urls.txt
+          set +e
+          phfetch direct-download --urls-file urls.txt --quality "$QUALITY" --output "$OUTPUT_DIR" --json > command-output.log 2> command-stderr.log
+          exit_code=$?
+          set -e
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+
+      - name: Build Release Metadata
+        if: always()
+        shell: bash
+        env:
+          RUN_EXIT_CODE: ${{ steps.run_cmd.outputs.exit_code }}
+          OUTPUT_DIR_ENV: ${{ env.OUTPUT_DIR }}
         run: |
           set -euo pipefail
-          printf '%s\n' "$URLS" > urls.txt
-          phfetch direct-download --urls-file urls.txt --quality "$QUALITY" --output "$OUTPUT_DIR" --json
+          python - <<'PY'
+          import json
+          import os
+          from json import JSONDecodeError, JSONDecoder
+          from pathlib import Path
+
+          output_path = Path("command-output.log")
+          stderr_path = Path("command-stderr.log")
+          output_dir = Path(os.getenv("OUTPUT_DIR_ENV", "downloads"))
+          run_exit_code = os.getenv("RUN_EXIT_CODE", "")
+
+          def parse_json_values(text: str):
+              values = []
+              decoder = JSONDecoder()
+              i = 0
+              n = len(text)
+              while i < n:
+                  while i < n and text[i].isspace():
+                      i += 1
+                  if i >= n:
+                      break
+                  try:
+                      value, end = decoder.raw_decode(text, i)
+                  except JSONDecodeError:
+                      i += 1
+                      continue
+                  values.append(value)
+                  i = end
+              return values
+
+          def esc(value: str) -> str:
+              return value.replace("|", "\\|").replace("\n", " ").strip()
+
+          raw = output_path.read_text(encoding="utf-8") if output_path.exists() else ""
+          values = parse_json_values(raw)
+
+          result = {
+              "succeeded": [],
+              "failed": [],
+              "failure_reasons": {},
+              "download_context": {},
+          }
+          for value in reversed(values):
+              if isinstance(value, dict) and "succeeded" in value and "failed" in value:
+                  result = value
+                  break
+
+          Path("download_result.json").write_text(
+              json.dumps(result, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+
+          succeeded = set(result.get("succeeded", []))
+          failed = set(result.get("failed", []))
+          all_urls = list(dict.fromkeys(result.get("succeeded", []) + result.get("failed", [])))
+
+          rows = ["| # | URL | Status |", "|---|---|---|"]
+          if all_urls:
+              for idx, url in enumerate(all_urls, start=1):
+                  status = "downloaded" if url in succeeded else "failed"
+                  rows.append(f"| {idx} | {esc(url)} | {status} |")
+          else:
+              rows.append("| 1 | (no URL parsed from output) | unknown |")
+
+          asset_rows = ["| File | Size (MB) |", "|---|---|"]
+          assets = []
+          if output_dir.exists() and output_dir.is_dir():
+              for file in sorted(output_dir.rglob("*")):
+                  if file.is_file() and file.stat().st_size > 0:
+                      size_mb = file.stat().st_size / (1024 * 1024)
+                      rel_name = file.relative_to(output_dir)
+                      assets.append((str(rel_name), size_mb))
+          if assets:
+              for name, size_mb in assets:
+                  asset_rows.append(f"| {esc(name)} | {size_mb:.2f} |")
+          else:
+              asset_rows.append("| (no downloadable media file) | 0.00 |")
+
+          summary = [
+              "# Direct Download Result",
+              "",
+              f"- Command exit code: `{run_exit_code}`",
+              f"- Succeeded: **{len(result.get('succeeded', []))}**",
+              f"- Failed: **{len(result.get('failed', []))}**",
+              "",
+              "## Video Table",
+              "",
+              *rows,
+              "",
+              "## Release Assets",
+              "",
+              *asset_rows,
+              "",
+              "## Logs",
+              "",
+              "- `command-output.log`",
+              "- `command-stderr.log`",
+              "- `download_result.json`",
+          ]
+          Path("release_notes.md").write_text("\n".join(summary) + "\n", encoding="utf-8")
+
+          if not stderr_path.exists():
+              stderr_path.write_text("", encoding="utf-8")
+          PY
+
+      - name: Create Release
+        if: always()
+        uses: softprops/action-gh-release@v3.0.0
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_NAME }}
+          body_path: release_notes.md
+          fail_on_unmatched_files: false
+          files: |
+            ${{ env.OUTPUT_DIR }}/**
+            command-output.log
+            command-stderr.log
+            download_result.json
+            release_notes.md
+
+      - name: Fail Job If Download Failed
+        if: always() && steps.run_cmd.outputs.exit_code != '0'
+        run: |
+          echo "download command failed with exit code ${{ steps.run_cmd.outputs.exit_code }}"
+          exit 1

@@ -92,6 +92,9 @@ on:
         default: "45"
         type: string
 
+permissions:
+  contents: write
+
 jobs:
   run:
     runs-on: ubuntu-latest
@@ -115,6 +118,8 @@ jobs:
       TIMEOUT: ${{ inputs.timeout }}
       PHFETCH_COOKIE: ${{ secrets.PHFETCH_COOKIE }}
       PHFETCH_PROXY: ${{ secrets.PHFETCH_PROXY }}
+      RELEASE_TAG: search-download-${{ github.run_id }}-${{ github.run_attempt }}
+      RELEASE_NAME: Search Download ${{ github.run_id }}.${{ github.run_attempt }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -130,9 +135,11 @@ jobs:
           pip install .
 
       - name: Search and Download
+        id: run_cmd
         shell: bash
+        continue-on-error: true
         run: |
-          set -euo pipefail
+          set -uo pipefail
           cmd=(phfetch download --query "$QUERY" --limit "$LIMIT" --pool-size "$POOL_SIZE" --mode "$MODE" --orientation "$ORIENTATION" --order "$ORDER" --period "$PERIOD" --output "$OUTPUT_DIR" --timeout "$TIMEOUT" --json)
           [[ -n "$SEED" ]] && cmd+=(--seed "$SEED")
           [[ -n "$CATEGORY" ]] && cmd+=(--category "$CATEGORY")
@@ -142,4 +149,170 @@ jobs:
           [[ -n "$MIN_QUALITY" ]] && cmd+=(--min-quality "$MIN_QUALITY")
           [[ -n "$MIN_VIEWS" ]] && cmd+=(--min-views "$MIN_VIEWS")
           [[ "$HD_ONLY" == "true" ]] && cmd+=(--hd-only)
-          "${cmd[@]}"
+
+          set +e
+          "${cmd[@]}" > command-output.log 2> command-stderr.log
+          exit_code=$?
+          set -e
+          echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
+
+      - name: Build Release Metadata
+        if: always()
+        shell: bash
+        env:
+          RUN_EXIT_CODE: ${{ steps.run_cmd.outputs.exit_code }}
+          OUTPUT_DIR_ENV: ${{ env.OUTPUT_DIR }}
+          QUERY_ENV: ${{ env.QUERY }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          from json import JSONDecodeError, JSONDecoder
+          from pathlib import Path
+
+          output_path = Path("command-output.log")
+          stderr_path = Path("command-stderr.log")
+          output_dir = Path(os.getenv("OUTPUT_DIR_ENV", "downloads"))
+          run_exit_code = os.getenv("RUN_EXIT_CODE", "")
+          query_value = os.getenv("QUERY_ENV", "")
+
+          def parse_json_values(text: str):
+              values = []
+              decoder = JSONDecoder()
+              i = 0
+              n = len(text)
+              while i < n:
+                  while i < n and text[i].isspace():
+                      i += 1
+                  if i >= n:
+                      break
+                  try:
+                      value, end = decoder.raw_decode(text, i)
+                  except JSONDecodeError:
+                      i += 1
+                      continue
+                  values.append(value)
+                  i = end
+              return values
+
+          def esc(value: str) -> str:
+              return value.replace("|", "\\|").replace("\n", " ").strip()
+
+          raw = output_path.read_text(encoding="utf-8") if output_path.exists() else ""
+          values = parse_json_values(raw)
+
+          videos = []
+          for value in values:
+              if isinstance(value, list):
+                  videos = value
+                  break
+
+          result = {
+              "succeeded": [],
+              "failed": [],
+              "failure_reasons": {},
+              "download_context": {},
+          }
+          for value in reversed(values):
+              if isinstance(value, dict) and "succeeded" in value and "failed" in value:
+                  result = value
+                  break
+
+          Path("search_results.json").write_text(
+              json.dumps(videos, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          Path("download_result.json").write_text(
+              json.dumps(result, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+
+          succeeded = set(result.get("succeeded", []))
+          failed = set(result.get("failed", []))
+
+          rows = ["| # | Title | URL | Status |", "|---|---|---|---|"]
+          if videos:
+              for idx, video in enumerate(videos, start=1):
+                  title = esc(str(video.get("title") or "-"))
+                  url = str(video.get("url") or "")
+                  if url in succeeded:
+                      status = "downloaded"
+                  elif url in failed:
+                      status = "failed"
+                  else:
+                      status = "not_attempted"
+                  rows.append(f"| {idx} | {title} | {esc(url)} | {status} |")
+          else:
+              all_urls = list(dict.fromkeys(result.get("succeeded", []) + result.get("failed", [])))
+              if all_urls:
+                  for idx, url in enumerate(all_urls, start=1):
+                      status = "downloaded" if url in succeeded else "failed"
+                      rows.append(f"| {idx} | - | {esc(url)} | {status} |")
+              else:
+                  rows.append("| 1 | (no video parsed from output) | - | unknown |")
+
+          asset_rows = ["| File | Size (MB) |", "|---|---|"]
+          assets = []
+          if output_dir.exists() and output_dir.is_dir():
+              for file in sorted(output_dir.rglob("*")):
+                  if file.is_file() and file.stat().st_size > 0:
+                      size_mb = file.stat().st_size / (1024 * 1024)
+                      rel_name = file.relative_to(output_dir)
+                      assets.append((str(rel_name), size_mb))
+          if assets:
+              for name, size_mb in assets:
+                  asset_rows.append(f"| {esc(name)} | {size_mb:.2f} |")
+          else:
+              asset_rows.append("| (no downloadable media file) | 0.00 |")
+
+          summary = [
+              "# Search Download Result",
+              "",
+              f"- Query: `{esc(query_value)}`",
+              f"- Command exit code: `{run_exit_code}`",
+              f"- Succeeded: **{len(result.get('succeeded', []))}**",
+              f"- Failed: **{len(result.get('failed', []))}**",
+              "",
+              "## Video Table",
+              "",
+              *rows,
+              "",
+              "## Release Assets",
+              "",
+              *asset_rows,
+              "",
+              "## Logs",
+              "",
+              "- `command-output.log`",
+              "- `command-stderr.log`",
+              "- `search_results.json`",
+              "- `download_result.json`",
+          ]
+          Path("release_notes.md").write_text("\n".join(summary) + "\n", encoding="utf-8")
+
+          if not stderr_path.exists():
+              stderr_path.write_text("", encoding="utf-8")
+          PY
+
+      - name: Create Release
+        if: always()
+        uses: softprops/action-gh-release@v3.0.0
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          name: ${{ env.RELEASE_NAME }}
+          body_path: release_notes.md
+          fail_on_unmatched_files: false
+          files: |
+            ${{ env.OUTPUT_DIR }}/**
+            command-output.log
+            command-stderr.log
+            search_results.json
+            download_result.json
+            release_notes.md
+
+      - name: Fail Job If Download Failed
+        if: always() && steps.run_cmd.outputs.exit_code != '0'
+        run: |
+          echo "download command failed with exit code ${{ steps.run_cmd.outputs.exit_code }}"
+          exit 1
