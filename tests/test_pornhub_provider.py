@@ -52,32 +52,44 @@ def test_filter_by_query_falls_back_to_single_token_matches_when_needed() -> Non
     assert [video.url for video in out] == ["u1", "u2"]
 
 
-def test_search_url_uses_gay_path_when_orientation_is_gay() -> None:
+def test_search_url_keeps_default_path_and_prefixes_gay_in_query() -> None:
     provider = PornhubProvider()
     base = provider._search_base_url(provider._effective_orientation("gay"))
-    url = provider._search_url(base, "demo", 2)
-    assert url == "https://www.pornhub.com/gay/video/search?search=demo&page=2"
+    query = provider._query_with_orientation_prefix("demo", "gay")
+    url = provider._search_url(base, query, 2)
+    assert url == "https://www.pornhub.com/video/search?search=gay+demo&page=2"
 
 
-def test_search_url_uses_lesbian_path_when_orientation_is_lesbian() -> None:
+def test_search_url_keeps_default_path_and_prefixes_lesbian_in_query() -> None:
     provider = PornhubProvider()
     base = provider._search_base_url(provider._effective_orientation("lesbian"))
-    url = provider._search_url(base, "demo", 2)
-    assert url == "https://www.pornhub.com/lesbian/video/search?search=demo&page=2"
+    query = provider._query_with_orientation_prefix("demo", "lesbian")
+    url = provider._search_url(base, query, 2)
+    assert url == "https://www.pornhub.com/video/search?search=lesbian+demo&page=2"
 
 
 def test_search_url_uses_default_path_for_non_gay_orientation() -> None:
     provider = PornhubProvider()
-    base = provider._search_base_url(provider._effective_orientation("bisexual"))
-    url = provider._search_url(base, "demo", 1)
-    assert url == "https://www.pornhub.com/video/search?search=demo&page=1"
+    effective = provider._effective_orientation("bisexual")
+    base = provider._search_base_url(effective)
+    query = provider._query_with_orientation_prefix("demo", effective)
+    url = provider._search_url(base, query, 1)
+    assert url == "https://www.pornhub.com/video/search?search=straight+demo&page=1"
 
 
 def test_search_url_appends_filter_category_when_provided() -> None:
     provider = PornhubProvider()
-    base = provider._search_base_url(provider._effective_orientation("any"))
-    url = provider._search_url(base, "demo", 1, filter_category=35)
-    assert url == "https://www.pornhub.com/video/search?search=demo&page=1&filter_category=35"
+    effective = provider._effective_orientation("any")
+    base = provider._search_base_url(effective)
+    query = provider._query_with_orientation_prefix("demo", effective)
+    url = provider._search_url(base, query, 1, filter_category=35)
+    assert url == "https://www.pornhub.com/video/search?search=straight+demo&page=1&filter_category=35"
+
+
+def test_query_with_orientation_prefix_avoids_duplicate_keyword() -> None:
+    provider = PornhubProvider()
+    query = provider._query_with_orientation_prefix("gay angel rivera", "gay")
+    assert query == "gay angel rivera"
 
 
 def test_effective_orientation_prefers_category_gay() -> None:

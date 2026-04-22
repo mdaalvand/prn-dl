@@ -50,12 +50,13 @@ class PornhubProvider:
     ) -> list[Video]:
         normalized_query = self._normalized_search_query(query)
         resolved_orientation = self._effective_orientation(orientation, category, normalized_query)
+        orientation_query = self._query_with_orientation_prefix(normalized_query, resolved_orientation)
         base = self._search_base_url(resolved_orientation)
         self.http_client.warmup(timeout=timeout)
         pages = max_pages or self.settings.default_max_pages
         results = self._collect_pages(
             base_url=base,
-            query=normalized_query,
+            query=orientation_query,
             timeout=timeout,
             max_pages=pages,
             max_results=max_results,
@@ -161,13 +162,23 @@ class PornhubProvider:
         return int(value) if str(value).isdigit() else None
 
     def _search_base_url(self, orientation: str | None) -> str:
-        if orientation == "gay":
-            return "https://www.pornhub.com/gay/video/search"
-        if orientation == "lesbian":
-            return "https://www.pornhub.com/lesbian/video/search"
-        if orientation == "transgender":
-            return "https://www.pornhub.com/transgender/video/search"
+        _ = orientation
         return "https://www.pornhub.com/video/search"
+
+    def _query_with_orientation_prefix(self, query: str, orientation: str) -> str:
+        prefix_by_orientation = {
+            "straight": "straight",
+            "gay": "gay",
+            "lesbian": "lesbian",
+            "transgender": "transgender",
+        }
+        prefix = prefix_by_orientation.get(orientation, "")
+        if not prefix:
+            return query
+        terms = split_terms(query)
+        if prefix in terms:
+            return query
+        return f"{prefix} {query}".strip()
 
     def _search_url(
         self,
