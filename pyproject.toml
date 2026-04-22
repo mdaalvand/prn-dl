@@ -21,6 +21,7 @@ py-modules = [
   "cli",
   "config",
   "constants",
+  "errors",
   "filters",
   "logging_utils",
   "models",
