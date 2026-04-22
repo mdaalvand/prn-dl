@@ -52,12 +52,12 @@ def test_filter_by_query_falls_back_to_single_token_matches_when_needed() -> Non
     assert [video.url for video in out] == ["u1", "u2"]
 
 
-def test_search_url_keeps_default_path_and_prefixes_gay_in_query() -> None:
+def test_search_url_uses_gay_path_and_prefixes_gay_in_query() -> None:
     provider = PornhubProvider()
     base = provider._search_base_url(provider._effective_orientation("gay"))
     query = provider._query_with_orientation_prefix("demo", "gay")
     url = provider._search_url(base, query, 2)
-    assert url == "https://www.pornhub.com/video/search?search=gay+demo&page=2"
+    assert url == "https://www.pornhub.com/gay/video/search?search=gay+demo&page=2"
 
 
 def test_search_url_keeps_default_path_and_prefixes_lesbian_in_query() -> None:
@@ -144,3 +144,52 @@ def test_extract_videos_from_page_html_collects_view_video_links() -> None:
         "https://www.pornhub.com/view_video.php?viewkey=phabc",
         "https://www.pornhub.com/view_video.php?viewkey=phdef",
     ]
+
+
+def test_search_videos_uses_webmasters_api_first() -> None:
+    class FakeHttpClient:
+        def warmup(self, timeout: int) -> None:
+            _ = timeout
+
+        def get_json(self, url: str, timeout: int, params=None):
+            _ = (url, timeout)
+            page = (params or {}).get("page")
+            if page == 1:
+                return {
+                    "videos": [
+                        {"title": "One", "url": "https://www.pornhub.com/view_video.php?viewkey=one"},
+                        {"title": "Two", "url": "https://www.pornhub.com/view_video.php?viewkey=two"},
+                    ]
+                }
+            return {"videos": []}
+
+        def get_text(self, url: str, timeout: int) -> str:
+            _ = (url, timeout)
+            raise AssertionError("html fallback should not be called when API returns results")
+
+    provider = PornhubProvider(http_client=FakeHttpClient())
+    videos = provider.search_videos(query="angel rivera", max_results=2, timeout=5, max_pages=2, orientation="gay")
+
+    assert [video.url for video in videos] == [
+        "https://www.pornhub.com/view_video.php?viewkey=one",
+        "https://www.pornhub.com/view_video.php?viewkey=two",
+    ]
+
+
+def test_search_videos_falls_back_to_html_when_api_fails() -> None:
+    class FakeHttpClient:
+        def warmup(self, timeout: int) -> None:
+            _ = timeout
+
+        def get_json(self, url: str, timeout: int, params=None):
+            _ = (url, timeout, params)
+            raise RuntimeError("api unavailable")
+
+        def get_text(self, url: str, timeout: int) -> str:
+            _ = (url, timeout)
+            return '<a class="linkVideoThumb" href="/view_video.php?viewkey=phabc" title="Alpha"></a>'
+
+    provider = PornhubProvider(http_client=FakeHttpClient())
+    videos = provider.search_videos(query="angel rivera", max_results=1, timeout=5, max_pages=1, orientation="gay")
+
+    assert [video.url for video in videos] == ["https://www.pornhub.com/view_video.php?viewkey=phabc"]
