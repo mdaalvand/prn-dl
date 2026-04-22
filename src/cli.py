@@ -6,6 +6,7 @@ import sys
 from argparse import Namespace
 
 from config import AppSettings
+from errors import HttpRequestError
 from infrastructure.downloader import YtDlpDownloader
 from logging_utils import configure_logging
 from models import Video
@@ -87,14 +88,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     configure_logging(args.log_level)
     reporter = PipelineReporter(enabled=True, json_output=getattr(args, "json", False))
-    if args.command == "search":
-        return _run_search_command(args, reporter)
-    if args.command == "download":
-        return _run_search_download_command(args, reporter)
-    if args.command == "direct-download":
-        return _run_direct_download_command(args, reporter)
-    parser.error(f"Unknown command: {args.command}")
-    return 2
+    try:
+        if args.command == "search":
+            return _run_search_command(args, reporter)
+        if args.command == "download":
+            return _run_search_download_command(args, reporter)
+        if args.command == "direct-download":
+            return _run_direct_download_command(args, reporter)
+        parser.error(f"Unknown command: {args.command}")
+        return 2
+    except HttpRequestError as exc:
+        return _handle_http_request_error(args, exc)
 
 
 def _resolve_query(args: Namespace) -> str:
@@ -230,3 +234,36 @@ def _run_download(args: Namespace, videos: list[Video], reporter: PipelineReport
         }
         sys.stdout.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
     return 0 if not result.failed else 1
+
+
+def _handle_http_request_error(args: Namespace, exc: HttpRequestError) -> int:
+    payload = {
+        "error": {
+            "type": "http_request_error",
+            "method": exc.method,
+            "url": exc.url,
+            "status_code": exc.status_code,
+            "attempts": exc.attempts,
+            "reason": exc.reason,
+            "hint": (
+                "Provider blocked request (often datacenter IP / anti-bot 403). "
+                "Try self-hosted runner, proxy, or authenticated cookies."
+            ),
+        },
+        "request_context": {
+            "query": getattr(args, "query_flag", None) or getattr(args, "query", None),
+            "orientation": getattr(args, "orientation", None),
+            "category": getattr(args, "category", None),
+            "order": getattr(args, "order", None),
+            "period": getattr(args, "period", None),
+            "timeout": getattr(args, "timeout", None),
+        },
+    }
+    if getattr(args, "json", False):
+        sys.stdout.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
+    else:
+        sys.stderr.write(
+            f"HTTP request failed: {exc.method} {exc.url} | status={exc.status_code} "
+            f"attempts={exc.attempts} reason={exc.reason}\n"
+        )
+    return 1

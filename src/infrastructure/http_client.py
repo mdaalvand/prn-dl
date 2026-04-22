@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 import requests
 
 from constants import DEFAULT_USER_AGENT
+from errors import HttpRequestError
 
 
 @dataclass
@@ -39,14 +40,27 @@ class HttpClient:
 
     def _request(self, method: str, url: str, timeout: int, params: dict[str, object] | None = None) -> requests.Response:
         attempt = 0
+        last_exc: requests.RequestException | None = None
         while True:
             try:
                 response = self.session.request(method, url, params=params, timeout=timeout)
                 response.raise_for_status()
                 return response
             except requests.RequestException as exc:
+                last_exc = exc
                 if attempt >= self.retries:
-                    raise
+                    status_code = None
+                    reason = str(exc)
+                    if isinstance(exc, requests.HTTPError) and exc.response is not None:
+                        status_code = exc.response.status_code
+                        reason = f"{exc.response.status_code} {exc.response.reason}"
+                    raise HttpRequestError(
+                        method=method,
+                        url=url,
+                        attempts=attempt + 1,
+                        status_code=status_code,
+                        reason=reason,
+                    ) from last_exc
                 sleep_seconds = self.backoff_seconds * (2**attempt)
                 self._logger.warning(
                     "request_failed method=%s url=%s attempt=%s err=%s",
