@@ -29,6 +29,7 @@ class PornhubProvider:
             backoff_seconds=self.settings.backoff_seconds,
             request_cookie=self.settings.request_cookie,
             request_proxy=self.settings.request_proxy,
+            cookie_domain=".pornhub.com",
         )
 
     def search_videos(

@@ -22,6 +22,15 @@ class BoyfriendtvProvider:
             backoff_seconds=self.settings.backoff_seconds,
             request_cookie=self.settings.request_cookie,
             request_proxy=self.settings.request_proxy,
+            cookie_domain=".boyfriendtv.com",
+        )
+        # Use site-appropriate navigation headers; pornhub-origin headers trigger blocks on other sites.
+        self.http_client.session.headers.update(
+            {
+                "Referer": "https://www.boyfriendtv.com/",
+                "Origin": "https://www.boyfriendtv.com",
+                "Sec-Fetch-Site": "same-origin",
+            }
         )
 
     def search_videos(
@@ -44,7 +53,7 @@ class BoyfriendtvProvider:
     ) -> list[Video]:
         _ = (orientation, category, exclude_category, order, period, min_duration, max_duration, hd_only, min_quality)
         normalized_query = normalize_text(query)
-        self.http_client.warmup(timeout=timeout)
+        self.http_client.warmup(timeout=timeout, url="https://www.boyfriendtv.com/")
         pages = max_pages or self.settings.default_max_pages
         results = self._collect_pages(
             query=normalized_query,
@@ -86,8 +95,8 @@ class BoyfriendtvProvider:
         return all_videos
 
     def _search_url(self, query: str, page: int) -> str:
-        params = {"query": query, "page": page}
-        return f"https://www.boyfriendtv.com/search?{urlencode(params)}"
+        params = {"q": query, "page": page}
+        return f"https://www.boyfriendtv.com/search/?{urlencode(params)}"
 
     def _extract_videos_from_page_html(self, html: str) -> list[Video]:
         videos: list[Video] = []

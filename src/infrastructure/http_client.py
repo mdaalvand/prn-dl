@@ -17,6 +17,7 @@ class HttpClient:
     backoff_seconds: float
     request_cookie: str = ""
     request_proxy: str = ""
+    cookie_domain: str = ".pornhub.com"
     session: requests.Session = field(default_factory=requests.Session)
 
     def __post_init__(self) -> None:
@@ -45,9 +46,9 @@ class HttpClient:
         self._set_cookie_string(self.request_cookie)
         self._set_proxy(self.request_proxy)
 
-    def warmup(self, timeout: int) -> None:
+    def warmup(self, timeout: int, url: str = "https://www.pornhub.com/") -> None:
         try:
-            self.session.get("https://www.pornhub.com/", timeout=timeout)
+            self.session.get(url, timeout=timeout)
         except requests.RequestException:
             return
 
@@ -62,7 +63,10 @@ class HttpClient:
         jar = SimpleCookie()
         jar.load(cookie_string)
         for key, morsel in jar.items():
-            self.session.cookies.set(key, morsel.value, domain=".pornhub.com")
+            if self.cookie_domain:
+                self.session.cookies.set(key, morsel.value, domain=self.cookie_domain)
+            else:
+                self.session.cookies.set(key, morsel.value)
 
     def get_text(self, url: str, timeout: int, params: dict[str, object] | None = None) -> str:
         response = self._request("GET", url, timeout=timeout, params=params)
