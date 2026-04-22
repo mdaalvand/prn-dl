@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import time
 from dataclasses import dataclass
 
 from filters import apply_filters, sort_videos
@@ -36,8 +37,14 @@ class SearchOptions:
 
 
 def run_search_pipeline(provider, options: SearchOptions, reporter: PipelineReporter) -> list[Video]:
+    started_at = time.perf_counter()
     reporter.event("search_started", provider=getattr(provider, "name", "unknown"))
+    fetch_started_at = time.perf_counter()
     fetched = provider.search_videos(**_provider_kwargs(provider, options, reporter))
+    fetch_elapsed_ms = int((time.perf_counter() - fetch_started_at) * 1000)
+    reporter.event("search_stage_timing", stage="provider_fetch", elapsed_ms=fetch_elapsed_ms, fetched=len(fetched))
+
+    filter_started_at = time.perf_counter()
     filtered = apply_filters(
         fetched,
         min_duration=options.min_duration,
@@ -50,7 +57,15 @@ def run_search_pipeline(provider, options: SearchOptions, reporter: PipelineRepo
         exclude_terms=options.exclude_terms,
         orientation=options.orientation,
     )
+    filter_elapsed_ms = int((time.perf_counter() - filter_started_at) * 1000)
+    reporter.event("search_stage_timing", stage="filter", elapsed_ms=filter_elapsed_ms, filtered=len(filtered))
+
+    sort_started_at = time.perf_counter()
     ordered = sort_videos(filtered, by=options.sort_by)
+    sort_elapsed_ms = int((time.perf_counter() - sort_started_at) * 1000)
+    reporter.event("search_stage_timing", stage="sort", elapsed_ms=sort_elapsed_ms, ordered=len(ordered))
+
+    select_started_at = time.perf_counter()
     selected = select_videos(
         ordered,
         limit=options.count,
@@ -58,7 +73,16 @@ def run_search_pipeline(provider, options: SearchOptions, reporter: PipelineRepo
         mode=options.mode,
         seed=options.seed,
     )
-    reporter.event("search_finished", fetched=len(fetched), filtered=len(filtered), selected=len(selected))
+    select_elapsed_ms = int((time.perf_counter() - select_started_at) * 1000)
+    total_elapsed_ms = int((time.perf_counter() - started_at) * 1000)
+    reporter.event("search_stage_timing", stage="select", elapsed_ms=select_elapsed_ms, selected=len(selected))
+    reporter.event(
+        "search_finished",
+        fetched=len(fetched),
+        filtered=len(filtered),
+        selected=len(selected),
+        elapsed_ms=total_elapsed_ms,
+    )
     return selected
 
 

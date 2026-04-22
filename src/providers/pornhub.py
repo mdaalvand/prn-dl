@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from difflib import SequenceMatcher
 import re
+import time
 from urllib.parse import urlencode
 
 from config import AppSettings
@@ -108,13 +109,28 @@ class PornhubProvider:
                 max_duration=max_duration,
                 hd_only=hd_only,
             )
+            page_started_at = time.perf_counter()
+            fetch_started_at = time.perf_counter()
             html = self.http_client.get_text(url, timeout=timeout)
+            fetch_elapsed_ms = int((time.perf_counter() - fetch_started_at) * 1000)
+            parse_started_at = time.perf_counter()
             page_videos = self._extract_videos_from_page_html(html)
+            parse_elapsed_ms = int((time.perf_counter() - parse_started_at) * 1000)
             page_videos = [v for v in page_videos if v.url not in dedup]
             if not page_videos:
+                if progress is not None:
+                    page_elapsed_ms = int((time.perf_counter() - page_started_at) * 1000)
+                    progress(
+                        f"page={page} found=0 fetch_ms={fetch_elapsed_ms} "
+                        f"parse_ms={parse_elapsed_ms} total_ms={page_elapsed_ms}"
+                    )
                 break
             if progress is not None:
-                progress(f"page={page} found={len(page_videos)}")
+                page_elapsed_ms = int((time.perf_counter() - page_started_at) * 1000)
+                progress(
+                    f"page={page} found={len(page_videos)} fetch_ms={fetch_elapsed_ms} "
+                    f"parse_ms={parse_elapsed_ms} total_ms={page_elapsed_ms}"
+                )
             for video in page_videos:
                 dedup.add(video.url)
                 all_videos.append(video)

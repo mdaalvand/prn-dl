@@ -82,6 +82,7 @@ class YtDlpDownloader:
         audio_only: bool,
         timeout: int,
     ) -> DownloadResult:
+        batch_started_at = time.perf_counter()
         try:
             Path(output_dir).mkdir(parents=True, exist_ok=True)
             succeeded: list[str] = []
@@ -89,6 +90,15 @@ class YtDlpDownloader:
             failures: dict[str, str] = {}
             for index, video in enumerate(videos, start=1):
                 number_prefix = f"{index:03d}"
+                item_started_at = time.perf_counter()
+                self._logger.info(
+                    "download_item_started index=%s total=%s url=%s quality=%s audio_only=%s",
+                    index,
+                    len(videos),
+                    video.url,
+                    quality,
+                    audio_only,
+                )
                 ok, reason = self._download_with_retry(
                     video.url,
                     output_dir,
@@ -97,11 +107,33 @@ class YtDlpDownloader:
                     timeout,
                     number_prefix=number_prefix,
                 )
+                item_elapsed_ms = int((time.perf_counter() - item_started_at) * 1000)
                 if ok:
                     succeeded.append(video.url)
+                    self._logger.info(
+                        "download_item_finished index=%s status=ok elapsed_ms=%s url=%s",
+                        index,
+                        item_elapsed_ms,
+                        video.url,
+                    )
                     continue
                 failed.append(video.url)
                 failures[video.url] = reason
+                self._logger.warning(
+                    "download_item_finished index=%s status=failed elapsed_ms=%s url=%s reason=%s",
+                    index,
+                    item_elapsed_ms,
+                    video.url,
+                    reason,
+                )
+            batch_elapsed_ms = int((time.perf_counter() - batch_started_at) * 1000)
+            self._logger.info(
+                "download_batch_finished total=%s succeeded=%s failed=%s elapsed_ms=%s",
+                len(videos),
+                len(succeeded),
+                len(failed),
+                batch_elapsed_ms,
+            )
             return DownloadResult(succeeded=succeeded, failed=failed, failures=failures)
         finally:
             self._cleanup_temp_cookies_file()
@@ -117,7 +149,17 @@ class YtDlpDownloader:
     ) -> tuple[bool, str]:
         last_reason = "unknown_error"
         for attempt in range(self.retries + 1):
+            attempt_started_at = time.perf_counter()
             ok, reason = self._run_yt_dlp(url, output_dir, quality, audio_only, timeout, number_prefix=number_prefix)
+            attempt_elapsed_ms = int((time.perf_counter() - attempt_started_at) * 1000)
+            self._logger.info(
+                "download_attempt_finished url=%s attempt=%s/%s ok=%s elapsed_ms=%s",
+                url,
+                attempt + 1,
+                self.retries + 1,
+                ok,
+                attempt_elapsed_ms,
+            )
             if ok:
                 return True, ""
             last_reason = reason
