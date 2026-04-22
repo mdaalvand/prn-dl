@@ -117,8 +117,48 @@ def test_download_json_output_contains_context_and_reasons(monkeypatch, capsys) 
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
 
-    assert code == 1
+    assert code == 0
     assert payload["succeeded"] == ["u1"]
     assert payload["failed"] == ["u2"]
     assert payload["failure_reasons"]["u2"] == "timeout_after_300s"
     assert payload["download_context"]["timeout"] == 45
+
+
+def test_download_returns_error_only_when_all_items_fail(monkeypatch, capsys) -> None:
+    class FakeDownloader:
+        def __init__(
+            self,
+            retries: int,
+            backoff_seconds: float,
+            request_cookie: str = "",
+            request_proxy: str = "",
+            user_agent: str = "",
+            impersonate_target: str = "",
+        ) -> None:
+            _ = (retries, backoff_seconds, request_cookie, request_proxy, user_agent, impersonate_target)
+
+        def download_batch(self, videos, output_dir, quality, audio_only, timeout):
+            _ = (videos, output_dir, quality, audio_only, timeout)
+            from infrastructure.downloader import DownloadResult
+            return DownloadResult(succeeded=[], failed=["u1", "u2"], failures={"u1": "e1", "u2": "e2"})
+
+    monkeypatch.setattr("cli.YtDlpDownloader", FakeDownloader)
+
+    args = Namespace(
+        dry_run=False,
+        json=True,
+        quality=480,
+        audio_only=False,
+        timeout=45,
+        output="downloads",
+    )
+    reporter = PipelineReporter(enabled=False)
+    videos = [Video(title="a", url="u1"), Video(title="b", url="u2")]
+
+    code = _run_download(args, videos, reporter)
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert code == 1
+    assert payload["succeeded"] == []
+    assert payload["failed"] == ["u1", "u2"]

@@ -241,7 +241,7 @@ def _run_download(args: Namespace, videos: list[Video], reporter: PipelineReport
             },
         }
         sys.stdout.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
-    return 0 if not result.failed else 1
+    return 1 if result.failed and not result.succeeded else 0
 
 
 def _handle_http_request_error(args: Namespace, exc: HttpRequestError) -> int:
