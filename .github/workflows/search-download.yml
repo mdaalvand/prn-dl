@@ -1,0 +1,137 @@
+name: Search Download
+
+on:
+  workflow_dispatch:
+    inputs:
+      query:
+        description: Search query
+        required: true
+        type: string
+      limit:
+        description: Number of videos to download
+        required: false
+        default: "10"
+        type: string
+      pool_size:
+        description: Candidate pool size
+        required: false
+        default: "100"
+        type: string
+      mode:
+        description: Selection mode
+        required: false
+        default: top
+        type: choice
+        options: [top, random]
+      seed:
+        description: Random seed (optional)
+        required: false
+        default: ""
+        type: string
+      orientation:
+        description: Orientation
+        required: false
+        default: straight
+        type: choice
+        options: [straight, gay, transgender]
+      order:
+        description: Sort order
+        required: false
+        default: most_relevant
+        type: choice
+        options: [most_relevant, most_viewed, top_rated, newest, hottest]
+      period:
+        description: Period
+        required: false
+        default: alltime
+        type: choice
+        options: [daily, weekly, monthly, alltime]
+      category:
+        description: Category include (id)
+        required: false
+        default: ""
+        type: string
+      exclude_category:
+        description: Category exclude (ids like 5-90)
+        required: false
+        default: ""
+        type: string
+      min_duration:
+        description: Min duration in seconds
+        required: false
+        default: ""
+        type: string
+      max_duration:
+        description: Max duration in seconds
+        required: false
+        default: ""
+        type: string
+      min_quality:
+        description: Minimum quality (e.g. 720)
+        required: false
+        default: ""
+        type: string
+      hd_only:
+        description: HD only
+        required: false
+        default: false
+        type: boolean
+      min_views:
+        description: Minimum views
+        required: false
+        default: ""
+        type: string
+      output_dir:
+        description: Output directory
+        required: false
+        default: downloads
+        type: string
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      QUERY: ${{ inputs.query }}
+      LIMIT: ${{ inputs.limit }}
+      POOL_SIZE: ${{ inputs.pool_size }}
+      MODE: ${{ inputs.mode }}
+      SEED: ${{ inputs.seed }}
+      ORIENTATION: ${{ inputs.orientation }}
+      ORDER: ${{ inputs.order }}
+      PERIOD: ${{ inputs.period }}
+      CATEGORY: ${{ inputs.category }}
+      EXCLUDE_CATEGORY: ${{ inputs.exclude_category }}
+      MIN_DURATION: ${{ inputs.min_duration }}
+      MAX_DURATION: ${{ inputs.max_duration }}
+      MIN_QUALITY: ${{ inputs.min_quality }}
+      HD_ONLY: ${{ inputs.hd_only }}
+      MIN_VIEWS: ${{ inputs.min_views }}
+      OUTPUT_DIR: ${{ inputs.output_dir }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: Search and Download
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmd=(phfetch download --query "$QUERY" --limit "$LIMIT" --pool-size "$POOL_SIZE" --mode "$MODE" --orientation "$ORIENTATION" --order "$ORDER" --period "$PERIOD" --output "$OUTPUT_DIR" --json)
+          [[ -n "$SEED" ]] && cmd+=(--seed "$SEED")
+          [[ -n "$CATEGORY" ]] && cmd+=(--category "$CATEGORY")
+          [[ -n "$EXCLUDE_CATEGORY" ]] && cmd+=(--exclude-category "$EXCLUDE_CATEGORY")
+          [[ -n "$MIN_DURATION" ]] && cmd+=(--min-duration "$MIN_DURATION")
+          [[ -n "$MAX_DURATION" ]] && cmd+=(--max-duration "$MAX_DURATION")
+          [[ -n "$MIN_QUALITY" ]] && cmd+=(--min-quality "$MIN_QUALITY")
+          [[ -n "$MIN_VIEWS" ]] && cmd+=(--min-views "$MIN_VIEWS")
+          [[ "$HD_ONLY" == "true" ]] && cmd+=(--hd-only)
+          "${cmd[@]}"

@@ -1,0 +1,27 @@
+---
+description: Python Clean Code — follow clean-code-python (zedr) for readable, maintainable Python
+globs: "**/*.py"
+alwaysApply: true
+---
+# Clean Code Python (zedr)
+
+When writing or refactoring **Python** in this workspace, follow the principles from [clean-code-python](https://github.com/zedr/clean-code-python) (Robert C. Martin’s _Clean Code_, adapted for Python). This is guidance for readability and design, not a substitute for formatter/linter rules.
+
+## Rules
+
+- **Readable code over noise:** Prefer clear names and small units; avoid comments that only repeat the code.
+- **Meaningful, consistent vocabulary:** One concept, one name (e.g. do not mix `fetch_user`, `get_client_record` for the same entity without reason).
+- **Searchable names:** Avoid unexplained literals; use named constants when the value carries meaning.
+- **Functions do one thing:** Split when you mix abstraction levels or unrelated steps.
+- **Few parameters:** Prefer a small config/dataclass object when many parameters belong together.
+- **Function names say what they do:** Prefer `send()` over `handle()` when the action is specific.
+- **One level of abstraction per function:** Keep high-level orchestration separate from low-level details.
+- **No boolean flags that change behavior radically:** Prefer two functions or explicit strategies.
+- **Avoid hidden side effects:** Centralize I/O and mutation; prefer pure functions where practical.
+- **SOLID / SRP:** Single responsibility for modules and classes; extend via composition or clear extension points (e.g. mixins) rather than fragile overrides.
+- **DRY:** Remove duplication, but do not force bad abstractions.
+- **Dependency on abstractions:** Where it pays off (e.g. LLM provider), depend on a narrow interface.
+
+## Reference
+
+Full guide: https://github.com/zedr/clean-code-python

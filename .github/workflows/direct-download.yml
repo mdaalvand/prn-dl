@@ -1,0 +1,47 @@
+name: Direct Download
+
+on:
+  workflow_dispatch:
+    inputs:
+      urls:
+        description: "Video URLs, one per line"
+        required: true
+        type: string
+      quality:
+        description: Max quality
+        required: false
+        default: "720"
+        type: string
+      output_dir:
+        description: Output directory
+        required: false
+        default: downloads
+        type: string
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    env:
+      URLS: ${{ inputs.urls }}
+      QUALITY: ${{ inputs.quality }}
+      OUTPUT_DIR: ${{ inputs.output_dir }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.14"
+
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install .
+
+      - name: Direct Download
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$URLS" > urls.txt
+          phfetch direct-download --urls-file urls.txt --quality "$QUALITY" --output "$OUTPUT_DIR" --json

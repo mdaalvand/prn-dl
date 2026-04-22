@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pornhub-ytdlp-repo"
+version = "0.1.0"
+description = "CLI to search and download videos with yt-dlp"
+requires-python = ">=3.14"
+dependencies = [
+  "requests>=2.33.1",
+  "yt-dlp>=2026.3.17",
+]
+
+[project.scripts]
+phfetch = "cli:main"
+
+[tool.setuptools]
+include-package-data = false
+py-modules = [
+  "cli",
+  "config",
+  "constants",
+  "filters",
+  "logging_utils",
+  "models",
+  "pipeline",
+  "selection",
+  "status",
+  "utils",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["providers*", "infrastructure*"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
