@@ -11,7 +11,7 @@ from infrastructure.downloader import YtDlpDownloader
 from logging_utils import configure_logging
 from models import Video
 from pipeline import SearchOptions, run_search_pipeline
-from providers import get_provider
+from providers import available_sites, get_provider
 from status import PipelineReporter
 
 
@@ -46,12 +46,14 @@ def _build_direct_subparser(subparsers, settings: AppSettings) -> None:
     parser = subparsers.add_parser("direct-download", help="Download provided URLs")
     parser.add_argument("--url", action="append", default=[])
     parser.add_argument("--urls-file")
+    parser.add_argument("--site", choices=available_sites(), default="pornhub")
     _add_download_args(parser, settings)
 
 
 def _add_query_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("query", nargs="?", default=None)
     parser.add_argument("--query", dest="query_flag", default=None)
+    parser.add_argument("--site", choices=available_sites(), default="pornhub")
 
 
 def _add_filter_args(parser: argparse.ArgumentParser, settings: AppSettings) -> None:
@@ -150,7 +152,7 @@ def _run_search_command(args: Namespace, reporter: PipelineReporter) -> int:
     except ValueError as exc:
         sys.stderr.write(f"{exc}\n")
         return 2
-    provider = get_provider("pornhub")
+    provider = get_provider(args.site)
     options = _build_search_options(args, query)
     videos = run_search_pipeline(provider, options, reporter)
     _write_results(videos, json_output=args.json)
@@ -163,7 +165,7 @@ def _run_search_download_command(args: Namespace, reporter: PipelineReporter) ->
     except ValueError as exc:
         sys.stderr.write(f"{exc}\n")
         return 2
-    provider = get_provider("pornhub")
+    provider = get_provider(args.site)
     options = _build_search_options(args, query)
     videos = run_search_pipeline(provider, options, reporter)
     _write_results(videos, json_output=args.json)

@@ -7,6 +7,12 @@ on:
         description: Search query
         required: true
         type: string
+      site:
+        description: Provider site
+        required: false
+        default: pornhub
+        type: choice
+        options: [pornhub, boyfriendtv]
       limit:
         description: Number of videos to download
         required: false
@@ -106,6 +112,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       QUERY: ${{ inputs.query }}
+      SITE: ${{ inputs.site }}
       LIMIT: ${{ inputs.limit }}
       POOL_SIZE: ${{ inputs.pool_size }}
       MODE: ${{ inputs.mode }}
@@ -147,7 +154,7 @@ jobs:
         continue-on-error: true
         run: |
           set -euo pipefail
-          cmd=(phfetch download --query "$QUERY" --limit "$LIMIT" --pool-size "$POOL_SIZE" --mode "$MODE" --orientation "$ORIENTATION" --order "$ORDER" --period "$PERIOD" --quality "$QUALITY" --output "$OUTPUT_DIR" --timeout "$TIMEOUT" --json)
+          cmd=(phfetch download --site "$SITE" --query "$QUERY" --limit "$LIMIT" --pool-size "$POOL_SIZE" --mode "$MODE" --orientation "$ORIENTATION" --order "$ORDER" --period "$PERIOD" --quality "$QUALITY" --output "$OUTPUT_DIR" --timeout "$TIMEOUT" --json)
           [[ -n "$SEED" ]] && cmd+=(--seed "$SEED")
           [[ -n "$CATEGORY" ]] && cmd+=(--category "$CATEGORY")
           [[ -n "$EXCLUDE_CATEGORY" ]] && cmd+=(--exclude-category "$EXCLUDE_CATEGORY")

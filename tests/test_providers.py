@@ -10,8 +10,11 @@ from providers import available_sites, get_provider
 def test_default_provider_registered() -> None:
     sites = available_sites()
     assert "pornhub" in sites
+    assert "boyfriendtv" in sites
     provider = get_provider("pornhub")
     assert provider.name == "pornhub"
+    btv_provider = get_provider("boyfriendtv")
+    assert btv_provider.name == "boyfriendtv"
 
 
 def test_download_default_quality_is_480() -> None:
@@ -30,6 +33,18 @@ def test_search_accepts_orientation_filter() -> None:
     parser = build_parser()
     args = parser.parse_args(["search", "demo", "--orientation", "bi"])
     assert args.orientation == "bi"
+
+
+def test_search_accepts_site_selection() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["search", "demo", "--site", "boyfriendtv"])
+    assert args.site == "boyfriendtv"
+
+
+def test_direct_download_accepts_site_selection() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["direct-download", "--site", "boyfriendtv", "--url", "https://example.com/v"])
+    assert args.site == "boyfriendtv"
 
 
 def test_search_accepts_category() -> None:

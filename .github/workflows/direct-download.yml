@@ -7,6 +7,12 @@ on:
         description: "Video URLs, one per line"
         required: true
         type: string
+      site:
+        description: Provider site
+        required: false
+        default: pornhub
+        type: choice
+        options: [pornhub, boyfriendtv]
       quality:
         description: Max quality
         required: false
@@ -27,6 +33,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       URLS: ${{ inputs.urls }}
+      SITE: ${{ inputs.site }}
       QUALITY: ${{ inputs.quality }}
       OUTPUT_DIR: ${{ inputs.output_dir }}
       PHFETCH_COOKIE: ${{ secrets.PHFETCH_COOKIE }}
@@ -55,7 +62,7 @@ jobs:
           set -euo pipefail
           printf '%s\n' "$URLS" > urls.txt
           set +e
-          phfetch direct-download --urls-file urls.txt --quality "$QUALITY" --output "$OUTPUT_DIR" --json \
+          phfetch direct-download --site "$SITE" --urls-file urls.txt --quality "$QUALITY" --output "$OUTPUT_DIR" --json \
             > >(tee command-output.log) \
             2> >(tee command-stderr.log >&2)
           exit_code=$?
