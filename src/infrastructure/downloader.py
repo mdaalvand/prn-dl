@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import logging
 import os
-import subprocess
 import tempfile
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+from yt_dlp import DownloadError, YoutubeDL
 
 from constants import DEFAULT_USER_AGENT
 from models import Video
@@ -150,7 +151,14 @@ class YtDlpDownloader:
         last_reason = "unknown_error"
         for attempt in range(self.retries + 1):
             attempt_started_at = time.perf_counter()
-            ok, reason = self._run_yt_dlp(url, output_dir, quality, audio_only, timeout, number_prefix=number_prefix)
+            ok, reason = self._run_yt_dlp(
+                url,
+                output_dir,
+                quality,
+                audio_only,
+                timeout,
+                number_prefix=number_prefix,
+            )
             attempt_elapsed_ms = int((time.perf_counter() - attempt_started_at) * 1000)
             self._logger.info(
                 "download_attempt_finished url=%s attempt=%s/%s ok=%s elapsed_ms=%s",
@@ -181,21 +189,41 @@ class YtDlpDownloader:
         timeout: int,
         number_prefix: str,
     ) -> tuple[bool, str]:
-        cmd = self._build_command(
-            url,
-            output_dir,
-            quality,
-            audio_only,
-            impersonate_target=self.impersonate_target,
-            number_prefix=number_prefix,
-        )
         process_timeout = max(timeout * 12, 300)
         try:
-            completed = subprocess.run(cmd, capture_output=True, text=True, timeout=process_timeout)
-        except subprocess.TimeoutExpired:
-            reason = f"timeout_after_{process_timeout}s"
+            self._download_once(
+                url=url,
+                output_dir=output_dir,
+                quality=quality,
+                audio_only=audio_only,
+                process_timeout=process_timeout,
+                number_prefix=number_prefix,
+                impersonate_target=self.impersonate_target,
+            )
+            return True, ""
+        except DownloadError as exc:
+            reason = str(exc) or "yt_dlp_non_zero_exit"
+            if self._is_impersonate_not_available(reason) and self.impersonate_target:
+                self._logger.warning(
+                    "impersonate_unavailable_fallback url=%s target=%s",
+                    url,
+                    self.impersonate_target,
+                )
+                try:
+                    self._download_once(
+                        url=url,
+                        output_dir=output_dir,
+                        quality=quality,
+                        audio_only=audio_only,
+                        process_timeout=process_timeout,
+                        number_prefix=number_prefix,
+                        impersonate_target="",
+                    )
+                    return True, ""
+                except DownloadError as fallback_exc:
+                    reason = str(fallback_exc) or "yt_dlp_non_zero_exit_after_fallback"
             self._logger.error(
-                "download_failed url=%s reason=%s quality=%s output_dir=%s audio_only=%s",
+                "download_failed url=%s stderr=%s quality=%s output_dir=%s audio_only=%s",
                 url,
                 reason,
                 quality,
@@ -203,87 +231,77 @@ class YtDlpDownloader:
                 audio_only,
             )
             return False, reason
-        if completed.returncode == 0:
-            return True, ""
-        stderr = completed.stderr.strip() or "yt_dlp_non_zero_exit"
-        if self._is_impersonate_not_available(stderr) and self.impersonate_target:
-            fallback_cmd = self._build_command(
+        except Exception as exc:  # keep retry behavior for unexpected runtime errors
+            reason = str(exc) or "yt_dlp_runtime_error"
+            self._logger.error(
+                "download_failed url=%s stderr=%s quality=%s output_dir=%s audio_only=%s",
                 url,
-                output_dir,
+                reason,
                 quality,
+                output_dir,
                 audio_only,
-                impersonate_target="",
-                number_prefix=number_prefix,
             )
-            self._logger.warning(
-                "impersonate_unavailable_fallback url=%s target=%s",
-                url,
-                self.impersonate_target,
-            )
-            try:
-                completed = subprocess.run(fallback_cmd, capture_output=True, text=True, timeout=process_timeout)
-            except subprocess.TimeoutExpired:
-                return False, f"timeout_after_{process_timeout}s"
-            if completed.returncode == 0:
-                return True, ""
-            stderr = completed.stderr.strip() or "yt_dlp_non_zero_exit_after_fallback"
-        self._logger.error(
-            "download_failed url=%s code=%s stderr=%s quality=%s output_dir=%s audio_only=%s",
-            url,
-            completed.returncode,
-            stderr,
-            quality,
-            output_dir,
-            audio_only,
-        )
-        return False, stderr
+            return False, reason
 
-    def _build_command(
+    def _download_once(
         self,
         url: str,
         output_dir: str,
         quality: int,
         audio_only: bool,
-        impersonate_target: str,
+        process_timeout: int,
         number_prefix: str,
-    ) -> list[str]:
+        impersonate_target: str,
+    ) -> None:
+        opts = self._build_ydl_opts(
+            output_dir=output_dir,
+            quality=quality,
+            audio_only=audio_only,
+            process_timeout=process_timeout,
+            number_prefix=number_prefix,
+            impersonate_target=impersonate_target,
+        )
+        with YoutubeDL(opts) as ydl:
+            ydl.download([url])
+
+    def _build_ydl_opts(
+        self,
+        output_dir: str,
+        quality: int,
+        audio_only: bool,
+        process_timeout: int,
+        number_prefix: str,
+        impersonate_target: str,
+    ) -> dict[str, object]:
         output_pattern = str(Path(output_dir) / f"{number_prefix} - %(title)s.%(ext)s")
         if audio_only:
             format_selector = "bestaudio/best"
         else:
             format_selector = f"bestvideo[height<={quality}]+bestaudio/best[height<={quality}]/best"
-        cmd = [
-            "yt-dlp",
-            "--no-progress",
-            "--retries",
-            "3",
-            "--extractor-retries",
-            "3",
-            "--fragment-retries",
-            "8",
-            "--user-agent",
-            self.user_agent,
-            "--referer",
-            "https://www.pornhub.com/",
-            "--add-header",
-            "Origin: https://www.pornhub.com",
-            "--add-header",
-            "Accept-Language: en-US,en;q=0.9",
-            "-f",
-            format_selector,
-            "-o",
-            output_pattern,
-            url,
-        ]
+        opts: dict[str, object] = {
+            "format": format_selector,
+            "outtmpl": output_pattern,
+            "retries": 3,
+            "extractor_retries": 3,
+            "fragment_retries": 8,
+            "socket_timeout": process_timeout,
+            "http_headers": {
+                "User-Agent": self.user_agent,
+                "Referer": "https://www.pornhub.com/",
+                "Origin": "https://www.pornhub.com",
+                "Accept-Language": "en-US,en;q=0.9",
+            },
+            "noprogress": True,
+            "quiet": True,
+            "no_warnings": False,
+        }
         if impersonate_target:
-            cmd.extend(["--impersonate", impersonate_target])
+            opts["impersonate"] = impersonate_target
         if self.request_proxy:
-            cmd.extend(["--proxy", self.request_proxy])
+            opts["proxy"] = self.request_proxy
         if self._resolved_cookies_file:
-            cmd.extend(["--cookies", self._resolved_cookies_file])
-        elif self.request_cookie:
-            cmd.extend(["--add-header", f"Cookie: {self.request_cookie}"])
-        return cmd
+            opts["cookiefile"] = self._resolved_cookies_file
+        return opts
 
     def _is_impersonate_not_available(self, stderr: str) -> bool:
         low = stderr.lower()
