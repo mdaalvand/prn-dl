@@ -51,10 +51,12 @@ jobs:
         shell: bash
         continue-on-error: true
         run: |
-          set -uo pipefail
+          set -euo pipefail
           printf '%s\n' "$URLS" > urls.txt
           set +e
-          phfetch direct-download --urls-file urls.txt --quality "$QUALITY" --output "$OUTPUT_DIR" --json > command-output.log 2> command-stderr.log
+          phfetch direct-download --urls-file urls.txt --quality "$QUALITY" --output "$OUTPUT_DIR" --json \
+            > >(tee command-output.log) \
+            2> >(tee command-stderr.log >&2)
           exit_code=$?
           set -e
           echo "exit_code=$exit_code" >> "$GITHUB_OUTPUT"
