@@ -17,7 +17,6 @@ MEDIA_DEFINITION_PATTERN = re.compile(
 )
 VIDEO_LINK_PATTERN = re.compile(r'href="(?P<href>/view_video\.php\?viewkey=[^"]+)"[^>]*')
 TITLE_ATTR_PATTERN = re.compile(r'title="(?P<title>[^"]*)"')
-WEBMASTERS_SEARCH_URL = "https://www.pornhub.com/webmasters/search"
 
 
 class PornhubProvider:
@@ -56,7 +55,7 @@ class PornhubProvider:
         base = self._search_base_url(resolved_orientation)
         self.http_client.warmup(timeout=timeout)
         pages = max_pages or self.settings.default_max_pages
-        results = self._search_with_api_fallback(
+        results = self._collect_pages(
             base_url=base,
             query=orientation_query,
             timeout=timeout,
@@ -78,104 +77,6 @@ class PornhubProvider:
         if min_quality is not None:
             results = self._filter_by_quality(results, min_quality=min_quality, timeout=timeout)
         return results
-
-    def _search_with_api_fallback(
-        self,
-        base_url: str,
-        query: str,
-        timeout: int,
-        max_pages: int,
-        max_results: int | None,
-        order: str | None,
-        period: str | None,
-        category: str | None,
-        exclude_category: str | None,
-        min_duration: int | None,
-        max_duration: int | None,
-        hd_only: bool,
-        progress,
-    ) -> list[Video]:
-        api_started_at = time.perf_counter()
-        try:
-            api_results = self._collect_pages_from_webmasters_api(
-                query=query,
-                timeout=timeout,
-                max_pages=max_pages,
-                max_results=max_results,
-                progress=progress,
-            )
-        except Exception as exc:
-            api_results = []
-            if progress is not None:
-                progress(f"source=webmasters_api status=error error={type(exc).__name__}")
-        api_elapsed_ms = int((time.perf_counter() - api_started_at) * 1000)
-        if api_results:
-            if progress is not None:
-                progress(f"source=webmasters_api selected={len(api_results)} elapsed_ms={api_elapsed_ms}")
-            return api_results
-        if progress is not None:
-            progress(f"source=html_fallback reason=api_empty elapsed_ms={api_elapsed_ms}")
-        return self._collect_pages(
-            base_url=base_url,
-            query=query,
-            timeout=timeout,
-            max_pages=max_pages,
-            max_results=max_results,
-            order=order,
-            period=period,
-            category=category,
-            exclude_category=exclude_category,
-            min_duration=min_duration,
-            max_duration=max_duration,
-            hd_only=hd_only,
-            progress=progress,
-        )
-
-    def _collect_pages_from_webmasters_api(
-        self,
-        query: str,
-        timeout: int,
-        max_pages: int,
-        max_results: int | None,
-        progress,
-    ) -> list[Video]:
-        dedup: set[str] = set()
-        all_videos: list[Video] = []
-        for page in range(1, max_pages + 1):
-            page_started_at = time.perf_counter()
-            payload = self.http_client.get_json(
-                WEBMASTERS_SEARCH_URL,
-                timeout=timeout,
-                params={"search": query, "page": page},
-            )
-            items = self._extract_webmasters_items(payload)
-            page_videos: list[Video] = []
-            for item in items:
-                video = self._video_from_webmaster_item(item)
-                if video is None or video.url in dedup:
-                    continue
-                dedup.add(video.url)
-                page_videos.append(video)
-            page_elapsed_ms = int((time.perf_counter() - page_started_at) * 1000)
-            if progress is not None:
-                progress(f"api_page={page} found={len(page_videos)} total_ms={page_elapsed_ms}")
-            if not page_videos:
-                break
-            all_videos.extend(page_videos)
-            if max_results is not None and len(all_videos) >= max_results:
-                return all_videos[:max_results]
-        return all_videos
-
-    def _extract_webmasters_items(self, payload: object) -> list[dict[str, object]]:
-        if isinstance(payload, list):
-            return [item for item in payload if isinstance(item, dict)]
-        if not isinstance(payload, dict):
-            return []
-        for key in ("videos", "items", "results"):
-            value = payload.get(key)
-            if isinstance(value, list):
-                return [item for item in value if isinstance(item, dict)]
-        return []
 
     def _collect_pages(
         self,
