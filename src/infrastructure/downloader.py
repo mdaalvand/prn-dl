@@ -24,6 +24,7 @@ class YtDlpDownloader:
     request_cookie: str = ""
     request_proxy: str = ""
     user_agent: str = DEFAULT_USER_AGENT
+    impersonate_target: str = ""
 
     def __post_init__(self) -> None:
         self._logger = logging.getLogger("phfetch.downloader")
@@ -64,7 +65,13 @@ class YtDlpDownloader:
         return False, last_reason
 
     def _run_yt_dlp(self, url: str, output_dir: str, quality: int, audio_only: bool, timeout: int) -> tuple[bool, str]:
-        cmd = self._build_command(url, output_dir, quality, audio_only)
+        cmd = self._build_command(
+            url,
+            output_dir,
+            quality,
+            audio_only,
+            impersonate_target=self.impersonate_target,
+        )
         process_timeout = max(timeout * 12, 300)
         try:
             completed = subprocess.run(cmd, capture_output=True, text=True, timeout=process_timeout)
@@ -82,6 +89,26 @@ class YtDlpDownloader:
         if completed.returncode == 0:
             return True, ""
         stderr = completed.stderr.strip() or "yt_dlp_non_zero_exit"
+        if self._is_impersonate_not_available(stderr) and self.impersonate_target:
+            fallback_cmd = self._build_command(
+                url,
+                output_dir,
+                quality,
+                audio_only,
+                impersonate_target="",
+            )
+            self._logger.warning(
+                "impersonate_unavailable_fallback url=%s target=%s",
+                url,
+                self.impersonate_target,
+            )
+            try:
+                completed = subprocess.run(fallback_cmd, capture_output=True, text=True, timeout=process_timeout)
+            except subprocess.TimeoutExpired:
+                return False, f"timeout_after_{process_timeout}s"
+            if completed.returncode == 0:
+                return True, ""
+            stderr = completed.stderr.strip() or "yt_dlp_non_zero_exit_after_fallback"
         self._logger.error(
             "download_failed url=%s code=%s stderr=%s quality=%s output_dir=%s audio_only=%s",
             url,
@@ -93,7 +120,14 @@ class YtDlpDownloader:
         )
         return False, stderr
 
-    def _build_command(self, url: str, output_dir: str, quality: int, audio_only: bool) -> list[str]:
+    def _build_command(
+        self,
+        url: str,
+        output_dir: str,
+        quality: int,
+        audio_only: bool,
+        impersonate_target: str,
+    ) -> list[str]:
         output_pattern = str(Path(output_dir) / "%(title)s.%(ext)s")
         if audio_only:
             format_selector = "bestaudio/best"
@@ -108,8 +142,6 @@ class YtDlpDownloader:
             "3",
             "--fragment-retries",
             "8",
-            "--impersonate",
-            "chrome",
             "--user-agent",
             self.user_agent,
             "--referer",
@@ -124,8 +156,14 @@ class YtDlpDownloader:
             output_pattern,
             url,
         ]
+        if impersonate_target:
+            cmd.extend(["--impersonate", impersonate_target])
         if self.request_proxy:
             cmd.extend(["--proxy", self.request_proxy])
         if self.request_cookie:
             cmd.extend(["--add-header", f"Cookie: {self.request_cookie}"])
         return cmd
+
+    def _is_impersonate_not_available(self, stderr: str) -> bool:
+        low = stderr.lower()
+        return "impersonate target" in low and "not available" in low

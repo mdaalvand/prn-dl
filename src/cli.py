@@ -218,6 +218,7 @@ def _run_download(args: Namespace, videos: list[Video], reporter: PipelineReport
         backoff_seconds=settings.backoff_seconds,
         request_cookie=settings.request_cookie,
         request_proxy=settings.request_proxy,
+        impersonate_target=settings.impersonate_target,
     )
     result = downloader.download_batch(
         videos,

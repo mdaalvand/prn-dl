@@ -91,8 +91,9 @@ def test_download_json_output_contains_context_and_reasons(monkeypatch, capsys) 
             request_cookie: str = "",
             request_proxy: str = "",
             user_agent: str = "",
+            impersonate_target: str = "",
         ) -> None:
-            _ = (retries, backoff_seconds, request_cookie, request_proxy, user_agent)
+            _ = (retries, backoff_seconds, request_cookie, request_proxy, user_agent, impersonate_target)
 
         def download_batch(self, videos, output_dir, quality, audio_only, timeout):
             _ = (videos, output_dir, quality, audio_only, timeout)

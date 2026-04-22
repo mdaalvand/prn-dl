@@ -19,6 +19,7 @@ class AppSettings:
     default_quality: int = constants.DEFAULT_QUALITY
     request_cookie: str = ""
     request_proxy: str = ""
+    impersonate_target: str = ""
 
     @classmethod
     def from_env(cls) -> "AppSettings":
@@ -34,4 +35,5 @@ class AppSettings:
             default_quality=int(os.getenv("PHFETCH_QUALITY", constants.DEFAULT_QUALITY)),
             request_cookie=os.getenv("PHFETCH_COOKIE", ""),
             request_proxy=os.getenv("PHFETCH_PROXY", ""),
+            impersonate_target=os.getenv("PHFETCH_IMPERSONATE", ""),
         )
