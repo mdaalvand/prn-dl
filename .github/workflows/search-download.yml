@@ -86,6 +86,11 @@ on:
         required: false
         default: downloads
         type: string
+      timeout:
+        description: HTTP timeout seconds (download timeout scales automatically)
+        required: false
+        default: "45"
+        type: string
 
 jobs:
   run:
@@ -107,6 +112,7 @@ jobs:
       HD_ONLY: ${{ inputs.hd_only }}
       MIN_VIEWS: ${{ inputs.min_views }}
       OUTPUT_DIR: ${{ inputs.output_dir }}
+      TIMEOUT: ${{ inputs.timeout }}
     steps:
       - name: Checkout
         uses: actions/checkout@v6
@@ -125,7 +131,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          cmd=(phfetch download --query "$QUERY" --limit "$LIMIT" --pool-size "$POOL_SIZE" --mode "$MODE" --orientation "$ORIENTATION" --order "$ORDER" --period "$PERIOD" --output "$OUTPUT_DIR" --json)
+          cmd=(phfetch download --query "$QUERY" --limit "$LIMIT" --pool-size "$POOL_SIZE" --mode "$MODE" --orientation "$ORIENTATION" --order "$ORDER" --period "$PERIOD" --output "$OUTPUT_DIR" --timeout "$TIMEOUT" --json)
           [[ -n "$SEED" ]] && cmd+=(--seed "$SEED")
           [[ -n "$CATEGORY" ]] && cmd+=(--category "$CATEGORY")
           [[ -n "$EXCLUDE_CATEGORY" ]] && cmd+=(--exclude-category "$EXCLUDE_CATEGORY")

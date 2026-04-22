@@ -198,6 +198,14 @@ def _run_download(args: Namespace, videos: list[Video], reporter: PipelineReport
     if args.dry_run:
         sys.stderr.write("Dry-run enabled. Skipping download.\n")
         return 0
+    reporter.event(
+        "download_started",
+        total=len(videos),
+        quality=args.quality,
+        timeout=args.timeout,
+        output=args.output,
+        audio_only=args.audio_only,
+    )
     settings = AppSettings.from_env()
     downloader = YtDlpDownloader(retries=settings.retries, backoff_seconds=settings.backoff_seconds)
     result = downloader.download_batch(
@@ -209,6 +217,16 @@ def _run_download(args: Namespace, videos: list[Video], reporter: PipelineReport
     )
     reporter.event("download_finished", succeeded=len(result.succeeded), failed=len(result.failed))
     if args.json:
-        payload = {"succeeded": result.succeeded, "failed": result.failed}
+        payload = {
+            "succeeded": result.succeeded,
+            "failed": result.failed,
+            "failure_reasons": result.failures,
+            "download_context": {
+                "quality": args.quality,
+                "timeout": args.timeout,
+                "output": args.output,
+                "audio_only": args.audio_only,
+            },
+        }
         sys.stdout.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
     return 0 if not result.failed else 1

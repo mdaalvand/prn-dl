@@ -1,4 +1,5 @@
 from argparse import Namespace
+import json
 
 from cli import _run_download, build_parser
 from models import Video
@@ -73,3 +74,37 @@ def test_download_dry_run_with_json_keeps_stdout_clean(capsys) -> None:
     assert code == 0
     assert captured.out == ""
     assert "Dry-run enabled. Skipping download." in captured.err
+
+
+def test_download_json_output_contains_context_and_reasons(monkeypatch, capsys) -> None:
+    class FakeDownloader:
+        def __init__(self, retries: int, backoff_seconds: float) -> None:
+            _ = (retries, backoff_seconds)
+
+        def download_batch(self, videos, output_dir, quality, audio_only, timeout):
+            _ = (videos, output_dir, quality, audio_only, timeout)
+            from infrastructure.downloader import DownloadResult
+            return DownloadResult(succeeded=["u1"], failed=["u2"], failures={"u2": "timeout_after_300s"})
+
+    monkeypatch.setattr("cli.YtDlpDownloader", FakeDownloader)
+
+    args = Namespace(
+        dry_run=False,
+        json=True,
+        quality=720,
+        audio_only=False,
+        timeout=45,
+        output="downloads",
+    )
+    reporter = PipelineReporter(enabled=False)
+    videos = [Video(title="ok", url="u1"), Video(title="fail", url="u2")]
+
+    code = _run_download(args, videos, reporter)
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert code == 1
+    assert payload["succeeded"] == ["u1"]
+    assert payload["failed"] == ["u2"]
+    assert payload["failure_reasons"]["u2"] == "timeout_after_300s"
+    assert payload["download_context"]["timeout"] == 45

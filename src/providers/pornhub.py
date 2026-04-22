@@ -63,6 +63,9 @@ class PornhubProvider:
             hd_only=hd_only,
             progress=progress,
         )
+        results = self._filter_by_query(results, query=normalized_query, progress=progress, strict=True)
+        if progress is not None:
+            progress(f"query_relevance_filtered={len(results)}")
         if min_quality is not None:
             results = self._filter_by_quality(results, min_quality=min_quality, timeout=timeout)
         return results

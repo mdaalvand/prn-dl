@@ -13,6 +13,7 @@ from models import Video
 class DownloadResult:
     succeeded: list[str]
     failed: list[str]
+    failures: dict[str, str]
 
 
 @dataclass
@@ -34,36 +35,59 @@ class YtDlpDownloader:
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         succeeded: list[str] = []
         failed: list[str] = []
+        failures: dict[str, str] = {}
         for video in videos:
-            if self._download_with_retry(video.url, output_dir, quality, audio_only, timeout):
+            ok, reason = self._download_with_retry(video.url, output_dir, quality, audio_only, timeout)
+            if ok:
                 succeeded.append(video.url)
                 continue
             failed.append(video.url)
-        return DownloadResult(succeeded=succeeded, failed=failed)
+            failures[video.url] = reason
+        return DownloadResult(succeeded=succeeded, failed=failed, failures=failures)
 
-    def _download_with_retry(self, url: str, output_dir: str, quality: int, audio_only: bool, timeout: int) -> bool:
+    def _download_with_retry(self, url: str, output_dir: str, quality: int, audio_only: bool, timeout: int) -> tuple[bool, str]:
+        last_reason = "unknown_error"
         for attempt in range(self.retries + 1):
-            if self._run_yt_dlp(url, output_dir, quality, audio_only, timeout):
-                return True
+            ok, reason = self._run_yt_dlp(url, output_dir, quality, audio_only, timeout)
+            if ok:
+                return True, ""
+            last_reason = reason
             if attempt == self.retries:
                 break
             sleep_seconds = self.backoff_seconds * (2**attempt)
-            self._logger.warning("retry_download url=%s attempt=%s", url, attempt + 1)
+            self._logger.warning("retry_download url=%s attempt=%s reason=%s", url, attempt + 1, reason)
             time.sleep(sleep_seconds)
-        return False
+        return False, last_reason
 
-    def _run_yt_dlp(self, url: str, output_dir: str, quality: int, audio_only: bool, timeout: int) -> bool:
+    def _run_yt_dlp(self, url: str, output_dir: str, quality: int, audio_only: bool, timeout: int) -> tuple[bool, str]:
         cmd = self._build_command(url, output_dir, quality, audio_only)
-        completed = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout * 6)
+        process_timeout = max(timeout * 12, 300)
+        try:
+            completed = subprocess.run(cmd, capture_output=True, text=True, timeout=process_timeout)
+        except subprocess.TimeoutExpired:
+            reason = f"timeout_after_{process_timeout}s"
+            self._logger.error(
+                "download_failed url=%s reason=%s quality=%s output_dir=%s audio_only=%s",
+                url,
+                reason,
+                quality,
+                output_dir,
+                audio_only,
+            )
+            return False, reason
         if completed.returncode == 0:
-            return True
+            return True, ""
+        stderr = completed.stderr.strip() or "yt_dlp_non_zero_exit"
         self._logger.error(
-            "download_failed url=%s code=%s stderr=%s",
+            "download_failed url=%s code=%s stderr=%s quality=%s output_dir=%s audio_only=%s",
             url,
             completed.returncode,
-            completed.stderr.strip(),
+            stderr,
+            quality,
+            output_dir,
+            audio_only,
         )
-        return False
+        return False, stderr
 
     def _build_command(self, url: str, output_dir: str, quality: int, audio_only: bool) -> list[str]:
         output_pattern = str(Path(output_dir) / "%(title)s.%(ext)s")
