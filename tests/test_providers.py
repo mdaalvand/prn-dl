@@ -11,10 +11,13 @@ def test_default_provider_registered() -> None:
     sites = available_sites()
     assert "pornhub" in sites
     assert "boyfriendtv" in sites
+    assert "onlygayvideo" in sites
     provider = get_provider("pornhub")
     assert provider.name == "pornhub"
     btv_provider = get_provider("boyfriendtv")
     assert btv_provider.name == "boyfriendtv"
+    ogv_provider = get_provider("onlygayvideo")
+    assert ogv_provider.name == "onlygayvideo"
 
 
 def test_download_default_quality_is_480() -> None:
