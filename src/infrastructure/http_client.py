@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 import time
-from http.cookies import SimpleCookie
 from dataclasses import dataclass, field
 
 import requests
@@ -60,13 +59,26 @@ class HttpClient:
     def _set_cookie_string(self, cookie_string: str) -> None:
         if not cookie_string:
             return
-        jar = SimpleCookie()
-        jar.load(cookie_string)
-        for key, morsel in jar.items():
+        for key, value in self._parse_cookie_header(cookie_string):
             if self.cookie_domain:
-                self.session.cookies.set(key, morsel.value, domain=self.cookie_domain)
+                self.session.cookies.set(key, value, domain=self.cookie_domain)
             else:
-                self.session.cookies.set(key, morsel.value)
+                self.session.cookies.set(key, value)
+
+    @staticmethod
+    def _parse_cookie_header(cookie_header: str) -> list[tuple[str, str]]:
+        pairs: list[tuple[str, str]] = []
+        for chunk in cookie_header.split(";"):
+            part = chunk.strip()
+            if not part or "=" not in part:
+                continue
+            key, value = part.split("=", 1)
+            key = key.strip()
+            value = value.strip()
+            if not key:
+                continue
+            pairs.append((key, value))
+        return pairs
 
     def get_text(self, url: str, timeout: int, params: dict[str, object] | None = None) -> str:
         response = self._request("GET", url, timeout=timeout, params=params)
