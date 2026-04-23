@@ -13,6 +13,17 @@ def test_parse_cookie_header_handles_browser_style_cookie_string() -> None:
     assert ("g_state", "{\"i_l\":0,\"i_ll\":1776893111130}") in out
 
 
+def test_parse_cookie_entries_handles_netscape_cookie_file() -> None:
+    raw = (
+        "# Netscape HTTP Cookie File\n"
+        ".boyfriendtv.com\tTRUE\t/\tFALSE\t1786276589\tcf_clearance\tabc.def\n"
+        "#HttpOnly_.boyfriendtv.com\tTRUE\t/\tFALSE\t1786276589\tmobileVersionWeb\tclassic\n"
+    )
+    out = HttpClient._parse_cookie_entries(raw)
+    assert ("cf_clearance", "abc.def", ".boyfriendtv.com") in out
+    assert ("mobileVersionWeb", "classic", ".boyfriendtv.com") in out
+
+
 def test_cookie_string_applies_to_configured_domain() -> None:
     client = HttpClient(
         retries=0,

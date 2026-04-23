@@ -59,11 +59,20 @@ class HttpClient:
     def _set_cookie_string(self, cookie_string: str) -> None:
         if not cookie_string:
             return
-        for key, value in self._parse_cookie_header(cookie_string):
-            if self.cookie_domain:
-                self.session.cookies.set(key, value, domain=self.cookie_domain)
-            else:
-                self.session.cookies.set(key, value)
+        for key, value, domain in self._parse_cookie_entries(cookie_string):
+            cookie_kwargs = {"domain": domain} if domain else {}
+            if not cookie_kwargs and self.cookie_domain:
+                cookie_kwargs["domain"] = self.cookie_domain
+            self.session.cookies.set(key, value, **cookie_kwargs)
+
+    @staticmethod
+    def _parse_cookie_entries(cookie_header: str) -> list[tuple[str, str, str | None]]:
+        entries: list[tuple[str, str, str | None]] = []
+        entries.extend(HttpClient._parse_netscape_cookie_file(cookie_header))
+        if entries:
+            return entries
+        entries.extend((key, value, None) for key, value in HttpClient._parse_cookie_header(cookie_header))
+        return entries
 
     @staticmethod
     def _parse_cookie_header(cookie_header: str) -> list[tuple[str, str]]:
@@ -79,6 +88,28 @@ class HttpClient:
                 continue
             pairs.append((key, value))
         return pairs
+
+    @staticmethod
+    def _parse_netscape_cookie_file(cookie_string: str) -> list[tuple[str, str, str | None]]:
+        entries: list[tuple[str, str, str | None]] = []
+        for raw_line in cookie_string.splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            if line.startswith("#") and not line.startswith("#HttpOnly_"):
+                continue
+            parts = raw_line.split("\t")
+            if len(parts) < 7:
+                continue
+            domain = parts[0].strip()
+            if domain.startswith("#HttpOnly_"):
+                domain = domain.removeprefix("#HttpOnly_")
+            name = parts[5].strip()
+            value = "\t".join(parts[6:]).strip()
+            if not name:
+                continue
+            entries.append((name, value, domain or None))
+        return entries
 
     def get_text(self, url: str, timeout: int, params: dict[str, object] | None = None) -> str:
         response = self._request("GET", url, timeout=timeout, params=params)
