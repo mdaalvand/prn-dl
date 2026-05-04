@@ -4,6 +4,7 @@ import argparse
 import json
 import sys
 from argparse import Namespace
+from urllib.parse import urlparse
 
 from config import AppSettings
 from errors import HttpRequestError
@@ -249,10 +250,26 @@ def _run_download(args: Namespace, videos: list[Video], reporter: PipelineReport
 
 
 def _resolve_download_urls(args: Namespace, videos: list[Video]) -> list[str]:
-    if getattr(args, "site", "") != "boyfriendtv":
-        return [video.url for video in videos]
     resolver = BoyfriendtvProvider()
-    return resolver.resolve_download_urls([video.url for video in videos], timeout=getattr(args, "timeout", 15))
+    timeout = getattr(args, "timeout", 15)
+    resolved: list[str] = []
+    for url in (video.url for video in videos):
+        if _is_boyfriendtv_page_url(url):
+            resolved.append(resolver.resolve_download_urls([url], timeout=timeout)[0])
+        else:
+            resolved.append(url)
+    return resolved
+
+
+def _is_boyfriendtv_page_url(url: str) -> bool:
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+    return host.endswith("boyfriendtv.com") and not _looks_like_media_url(url)
+
+
+def _looks_like_media_url(url: str) -> bool:
+    lower = url.lower()
+    return lower.endswith(".m3u8") or lower.endswith(".mp4") or "/get_file/" in lower
 
 
 def _handle_http_request_error(args: Namespace, exc: HttpRequestError) -> int:

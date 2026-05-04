@@ -234,15 +234,7 @@ def test_boyfriendtv_direct_download_resolves_page_urls(monkeypatch, capsys) -> 
     monkeypatch.setattr("cli.BoyfriendtvProvider", FakeResolver)
     monkeypatch.setattr("cli.YtDlpDownloader", FakeDownloader)
 
-    args = Namespace(
-        dry_run=False,
-        json=True,
-        quality=480,
-        audio_only=False,
-        timeout=45,
-        output="downloads",
-        site="boyfriendtv",
-    )
+    args = Namespace(dry_run=False, json=True, quality=480, audio_only=False, timeout=45, output="downloads")
     reporter = PipelineReporter(enabled=False)
     videos = [Video(title="a", url="https://www.boyfriendtv.com/videos/one")]
 
