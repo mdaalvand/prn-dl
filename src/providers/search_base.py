@@ -1,23 +1,21 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import urlencode
+from typing import Callable
+from urllib.parse import urljoin
 
 from config import AppSettings
 from infrastructure.http_client import HttpClient
 from models import Video
 from utils import normalize_text, split_terms
 
-VIDEO_LINK_PATTERN = re.compile(r'href="(?P<href>/videos?/[^"?#"]+)"')
-TITLE_ATTR_PATTERN = re.compile(r'title="(?P<title>[^"]*)"')
-MEDIA_URL_PATTERN = re.compile(
-    r'(?P<url>https?://[^"\']+\.(?:m3u8|mp4)(?:\?[^"\']*)?)|(?P<path>/get_file/[^"\']+)',
-    re.IGNORECASE,
-)
 
-
-class BoyfriendtvProvider:
-    name = "boyfriendtv"
+class SearchPageProvider:
+    name: str = ""
+    source: str = ""
+    home_url: str = ""
+    cookie_domain: str = ""
+    result_link_pattern: re.Pattern[str]
 
     def __init__(self, http_client: HttpClient | None = None, settings: AppSettings | None = None):
         self.settings = settings or AppSettings.from_env()
@@ -26,13 +24,12 @@ class BoyfriendtvProvider:
             backoff_seconds=self.settings.backoff_seconds,
             request_cookie=self.settings.request_cookie,
             request_proxy=self.settings.request_proxy,
-            cookie_domain=".boyfriendtv.com",
+            cookie_domain=self.cookie_domain,
         )
-        # Use site-appropriate navigation headers; pornhub-origin headers trigger blocks on other sites.
         self.http_client.session.headers.update(
             {
-                "Referer": "https://www.boyfriendtv.com/",
-                "Origin": "https://www.boyfriendtv.com",
+                "Referer": self.home_url,
+                "Origin": self.home_url.rstrip("/"),
                 "Sec-Fetch-Site": "same-origin",
             }
         )
@@ -42,7 +39,7 @@ class BoyfriendtvProvider:
         query: str,
         max_results: int | None = None,
         timeout: int = 15,
-        progress=None,
+        progress: Callable[[str], None] | None = None,
         max_pages: int | None = None,
         orientation: str | None = None,
         category: str | None = None,
@@ -57,7 +54,7 @@ class BoyfriendtvProvider:
     ) -> list[Video]:
         _ = (orientation, category, exclude_category, order, period, min_duration, max_duration, hd_only, min_quality)
         normalized_query = normalize_text(query)
-        self.http_client.warmup(timeout=timeout, url="https://www.boyfriendtv.com/")
+        self.http_client.warmup(timeout=timeout, url=self.home_url)
         pages = max_pages or self.settings.default_max_pages
         results = self._collect_pages(
             query=normalized_query,
@@ -78,7 +75,7 @@ class BoyfriendtvProvider:
         timeout: int,
         max_pages: int,
         max_results: int | None,
-        progress,
+        progress: Callable[[str], None] | None,
     ) -> list[Video]:
         dedup: set[str] = set()
         all_videos: list[Video] = []
@@ -86,7 +83,7 @@ class BoyfriendtvProvider:
             url = self._search_url(query=query, page=page)
             html = self.http_client.get_text(url, timeout=timeout)
             page_videos = self._extract_videos_from_page_html(html)
-            page_videos = [v for v in page_videos if v.url not in dedup]
+            page_videos = [video for video in page_videos if video.url not in dedup]
             if not page_videos:
                 break
             if progress is not None:
@@ -99,59 +96,34 @@ class BoyfriendtvProvider:
         return all_videos
 
     def _search_url(self, query: str, page: int) -> str:
-        params = {"q": query, "page": page}
-        return f"https://www.boyfriendtv.com/search/?{urlencode(params)}"
+        raise NotImplementedError
 
     def _extract_videos_from_page_html(self, html: str) -> list[Video]:
         videos: list[Video] = []
         seen: set[str] = set()
-        for match in VIDEO_LINK_PATTERN.finditer(html):
-            href = match.group("href")
-            absolute = f"https://www.boyfriendtv.com{href}" if href.startswith("/") else href
+        for match in self.result_link_pattern.finditer(html):
+            href = match.group("href").strip()
+            absolute = urljoin(self.home_url, href)
             if absolute in seen:
                 continue
-            tail = html[match.start() : match.end() + 220]
-            title_match = TITLE_ATTR_PATTERN.search(tail)
-            title = title_match.group("title").strip() if title_match else "Untitled"
-            videos.append(Video(title=title or "Untitled", url=absolute, source="boyfriendtv"))
+            tail = html[match.start() : match.end() + 260]
+            title = self._extract_title(tail)
+            videos.append(Video(title=title, url=absolute, source=self.source))
             seen.add(absolute)
         return videos
 
-    def resolve_download_urls(self, urls: list[str], timeout: int = 15) -> list[str]:
-        resolved: list[str] = []
-        for url in urls:
-            resolved.append(self._resolve_single_download_url(url, timeout=timeout))
-        return resolved
-
-    def _resolve_single_download_url(self, url: str, timeout: int) -> str:
-        if self._looks_like_media_url(url):
-            return url
-        html = self.http_client.get_text(url, timeout=timeout)
-        media_urls = self._extract_media_urls_from_page_html(html)
-        if media_urls:
-            return media_urls[0]
-        return url
-
-    def _extract_media_urls_from_page_html(self, html: str) -> list[str]:
-        media_urls: list[str] = []
-        seen: set[str] = set()
-        for match in MEDIA_URL_PATTERN.finditer(html):
-            candidate = match.group("url") or match.group("path")
-            if not candidate:
-                continue
-            absolute = f"https://www.boyfriendtv.com{candidate}" if candidate.startswith("/") else candidate
-            if absolute in seen:
-                continue
-            if not self._looks_like_media_url(absolute):
-                continue
-            media_urls.append(absolute)
-            seen.add(absolute)
-        return media_urls
-
-    @staticmethod
-    def _looks_like_media_url(url: str) -> bool:
-        lower = url.lower()
-        return lower.endswith(".m3u8") or lower.endswith(".mp4") or "/get_file/" in lower
+    def _extract_title(self, snippet: str) -> str:
+        for pattern in (
+            r'title="(?P<title>[^"]*)"',
+            r'aria-label="(?P<title>[^"]*)"',
+            r'data-title="(?P<title>[^"]*)"',
+        ):
+            match = re.search(pattern, snippet)
+            if match:
+                title = match.group("title").strip()
+                if title:
+                    return title
+        return "Untitled"
 
     def _filter_by_query(self, videos: list[Video], query: str) -> list[Video]:
         terms = split_terms(query)

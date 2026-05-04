@@ -37,3 +37,4 @@ include = ["providers*", "infrastructure*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]
+norecursedirs = ["tmp", ".venv", ".git"]

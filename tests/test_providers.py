@@ -12,12 +12,21 @@ def test_default_provider_registered() -> None:
     assert "pornhub" in sites
     assert "boyfriendtv" in sites
     assert "onlygayvideo" in sites
+    assert "eporner" in sites
+    assert "xhamster" in sites
+    assert "tnaflix" in sites
     provider = get_provider("pornhub")
     assert provider.name == "pornhub"
     btv_provider = get_provider("boyfriendtv")
     assert btv_provider.name == "boyfriendtv"
     ogv_provider = get_provider("onlygayvideo")
     assert ogv_provider.name == "onlygayvideo"
+    eporner_provider = get_provider("eporner")
+    assert eporner_provider.name == "eporner"
+    xhamster_provider = get_provider("xhamster")
+    assert xhamster_provider.name == "xhamster"
+    tnaflix_provider = get_provider("tnaflix")
+    assert tnaflix_provider.name == "tnaflix"
 
 
 def test_download_default_quality_is_480() -> None:
@@ -44,10 +53,22 @@ def test_search_accepts_site_selection() -> None:
     assert args.site == "boyfriendtv"
 
 
+def test_search_accepts_new_site_selection() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["search", "demo", "--site", "xhamster"])
+    assert args.site == "xhamster"
+
+
 def test_direct_download_accepts_site_selection() -> None:
     parser = build_parser()
     args = parser.parse_args(["direct-download", "--site", "boyfriendtv", "--url", "https://example.com/v"])
     assert args.site == "boyfriendtv"
+
+
+def test_direct_download_accepts_new_site_selection() -> None:
+    parser = build_parser()
+    args = parser.parse_args(["direct-download", "--site", "tnaflix", "--url", "https://example.com/v"])
+    assert args.site == "tnaflix"
 
 
 def test_search_accepts_category() -> None:
@@ -180,3 +201,54 @@ def test_download_returns_error_only_when_all_items_fail(monkeypatch, capsys) ->
     assert code == 1
     assert payload["succeeded"] == []
     assert payload["failed"] == ["u1", "u2"]
+
+
+def test_boyfriendtv_direct_download_resolves_page_urls(monkeypatch, capsys) -> None:
+    class FakeResolver:
+        def __init__(self, *args, **kwargs) -> None:
+            _ = (args, kwargs)
+
+        def resolve_download_urls(self, urls, timeout):
+            _ = timeout
+            return [f"{url}?resolved=1" for url in urls]
+
+    class FakeDownloader:
+        def __init__(
+            self,
+            retries: int,
+            backoff_seconds: float,
+            request_cookie: str = "",
+            request_proxy: str = "",
+            user_agent: str = "",
+            impersonate_target: str = "",
+        ) -> None:
+            _ = (retries, backoff_seconds, request_cookie, request_proxy, user_agent, impersonate_target)
+            self.downloaded_urls = []
+
+        def download_batch(self, videos, output_dir, quality, audio_only, timeout):
+            _ = (output_dir, quality, audio_only, timeout)
+            self.downloaded_urls = [video.url for video in videos]
+            from infrastructure.downloader import DownloadResult
+            return DownloadResult(succeeded=self.downloaded_urls, failed=[], failures={})
+
+    monkeypatch.setattr("cli.BoyfriendtvProvider", FakeResolver)
+    monkeypatch.setattr("cli.YtDlpDownloader", FakeDownloader)
+
+    args = Namespace(
+        dry_run=False,
+        json=True,
+        quality=480,
+        audio_only=False,
+        timeout=45,
+        output="downloads",
+        site="boyfriendtv",
+    )
+    reporter = PipelineReporter(enabled=False)
+    videos = [Video(title="a", url="https://www.boyfriendtv.com/videos/one")]
+
+    code = _run_download(args, videos, reporter)
+    captured = capsys.readouterr()
+    payload = json.loads(captured.out)
+
+    assert code == 0
+    assert payload["succeeded"] == ["https://www.boyfriendtv.com/videos/one?resolved=1"]

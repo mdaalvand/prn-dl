@@ -11,6 +11,7 @@ from infrastructure.downloader import YtDlpDownloader
 from logging_utils import configure_logging
 from models import Video
 from pipeline import SearchOptions, run_search_pipeline
+from providers.boyfriendtv import BoyfriendtvProvider
 from providers import available_sites, get_provider
 from status import PipelineReporter
 
@@ -206,9 +207,10 @@ def _run_download(args: Namespace, videos: list[Video], reporter: PipelineReport
     if args.dry_run:
         sys.stderr.write("Dry-run enabled. Skipping download.\n")
         return 0
+    download_urls = _resolve_download_urls(args, videos)
     reporter.event(
         "download_started",
-        total=len(videos),
+        total=len(download_urls),
         quality=args.quality,
         timeout=args.timeout,
         output=args.output,
@@ -223,7 +225,7 @@ def _run_download(args: Namespace, videos: list[Video], reporter: PipelineReport
         impersonate_target=settings.impersonate_target,
     )
     result = downloader.download_batch(
-        videos,
+        [Video(title=video.title, url=url, source=video.source) for video, url in zip(videos, download_urls, strict=False)],
         output_dir=args.output,
         quality=args.quality,
         audio_only=args.audio_only,
@@ -244,6 +246,13 @@ def _run_download(args: Namespace, videos: list[Video], reporter: PipelineReport
         }
         sys.stdout.write(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
     return 1 if result.failed and not result.succeeded else 0
+
+
+def _resolve_download_urls(args: Namespace, videos: list[Video]) -> list[str]:
+    if getattr(args, "site", "") != "boyfriendtv":
+        return [video.url for video in videos]
+    resolver = BoyfriendtvProvider()
+    return resolver.resolve_download_urls([video.url for video in videos], timeout=getattr(args, "timeout", 15))
 
 
 def _handle_http_request_error(args: Namespace, exc: HttpRequestError) -> int:

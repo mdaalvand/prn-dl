@@ -52,3 +52,38 @@ def test_search_videos_sets_boyfriendtv_headers_and_warmup_url() -> None:
     assert fake_http.session.headers["Referer"] == "https://www.boyfriendtv.com/"
     assert fake_http.session.headers["Origin"] == "https://www.boyfriendtv.com"
     assert fake_http.warmup_calls == [(7, "https://www.boyfriendtv.com/")]
+
+
+def test_resolve_download_urls_prefers_media_urls_from_page_html() -> None:
+    class FakeHttpClient:
+        def __init__(self) -> None:
+            self.session = type("Session", (), {"headers": {}})()
+            self.calls = []
+
+        def get_text(self, url: str, timeout: int) -> str:
+            self.calls.append((url, timeout))
+            return """
+            <html>
+              <script>
+                var hls = "https://cdn.boyfriendtv.com/video/abc/playlist.m3u8";
+                var mp4 = "/get_file/hash123/456/720.mp4";
+              </script>
+            </html>
+            """
+
+        def warmup(self, timeout: int, url: str = "https://www.pornhub.com/") -> None:
+            _ = (timeout, url)
+
+    provider = BoyfriendtvProvider(http_client=FakeHttpClient())
+    resolved = provider.resolve_download_urls(
+        [
+            "https://www.boyfriendtv.com/videos/sample-video-1",
+            "https://cdn.boyfriendtv.com/video/existing/playlist.m3u8",
+        ],
+        timeout=11,
+    )
+
+    assert resolved == [
+        "https://cdn.boyfriendtv.com/video/abc/playlist.m3u8",
+        "https://cdn.boyfriendtv.com/video/existing/playlist.m3u8",
+    ]

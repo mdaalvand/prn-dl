@@ -12,7 +12,7 @@ on:
         required: false
         default: pornhub
         type: choice
-        options: [pornhub, boyfriendtv, onlygayvideo]
+        options: [pornhub, boyfriendtv, onlygayvideo, eporner, xhamster, tnaflix]
       limit:
         description: Number of videos to download
         required: false
